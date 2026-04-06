@@ -23,7 +23,7 @@ body {
   margin-bottom: 20px;
   flex-wrap: wrap;
   gap: 12px;
-  padding: 10px;
+  padding: 20px;
   border-end-start-radius: 8px;
   border-end-end-radius: 8px;
   background-color: pink;
@@ -107,13 +107,6 @@ body {
   justify-content: center;
 }
 
-.rarity-badge {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  padding: 3px 9px;
-  pointer-events: none;
-}
 
 .egg-info {
   display: flex;
@@ -211,13 +204,6 @@ body {
 
 #modalBody {
   padding: 22px 26px 26px;
-}
-
-#mRarity {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 10px;
-  margin-bottom: 8px;
 }
 
 #mName {
