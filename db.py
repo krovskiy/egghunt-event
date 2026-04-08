@@ -7,7 +7,7 @@ from pathlib import Path
 from pydantic import BaseModel
 import dotenv
 
-SALT = "abc"# str(dotenv.dotenv_values(".env")["SALT"])
+SALT = str(dotenv.dotenv_values(".env")["SALT"])
 assert SALT is not None, "SALT is not set"
 
 class DBError(Exception):
