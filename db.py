@@ -10,6 +10,8 @@ import dotenv
 SALT = "abc"# str(dotenv.dotenv_values(".env")["SALT"])
 assert SALT is not None, "SALT is not set"
 
+class DBError(Exception):
+    pass
 
 class Egg(BaseModel):
     egg_id: str
@@ -112,13 +114,19 @@ class DB:
         self.conn.close()
 
     def __enter__(self,commit_after:bool=True):
-        self.__commit_after = commit_after
-        self.conn = sqlite.connect(self.path)
-        return self
+        try:
+            self.__commit_after = commit_after
+            self.conn = sqlite.connect(self.path)
+            return self
+        except sqlite.Error as e:
+            raise DBError(e) from e
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.__commit_after:
-            self.conn.commit()
+            try:
+                self.conn.commit()
+            except sqlite.Error as e:
+                raise DBError(e) from e
         self.conn.close()
 
     def add_egg(
@@ -146,7 +154,10 @@ class DB:
         return True, egg_id
 
     def get_egg(self, egg_id: str) -> Egg:
-        ret = self.conn.execute(self.__GET_EGGS_QUERY__, (egg_id,)).fetchone()
+        try:
+            ret = self.conn.execute(self.__GET_EGGS_QUERY__, (egg_id,)).fetchone()
+        except sqlite.OperationalError as e:
+            raise DBError(e) from e
 
         return Egg(
             egg_id=ret[0],
@@ -166,23 +177,26 @@ class DB:
             self.conn.execute(self.__REDEEM_EGG_QUERY__, {"id": egg_id, "user_id": uid})
             self.conn.commit()
             return self.conn.total_changes > before
-        except sqlite.OperationalError:
-            raise ValueError("Egg not found")
+        except sqlite.OperationalError as e :
+            raise DBError(e) from e
 
     def delete_egg(self, egg_id: str) -> None:
         """Deletes an egg from the database"""
         try:
             self.conn.execute(self.__DELETE_EGG_QUERY__, (egg_id,))
             self.conn.commit()
-        except sqlite.OperationalError:
-            raise ValueError("Egg not found")
+        except sqlite.OperationalError as e:
+            raise DBError(e) from e
 
     def list_eggs(self) -> list[Egg]:
         """Returns a list of all eggs in the database"""
-        return [
-            self.get_egg(egg_id)
-            for (egg_id,) in self.conn.execute("SELECT id FROM eyren")
-        ]
+        try:
+            return [
+                self.get_egg(egg_id)
+                for (egg_id,) in self.conn.execute("SELECT id FROM eyren")
+            ]
+        except sqlite.OperationalError as e:
+            raise DBError(e) from e
 
     def get_user_eggs(self, user_id: str) -> list[Egg]:
         """Returns a list of all eggs in the database"""
@@ -203,8 +217,8 @@ class DB:
                     )
                 )
             return user_eggs
-        except sqlite.OperationalError:
-            raise ValueError("User not found")
+        except sqlite.OperationalError as e:
+            raise DBError(e) from e
 
 
 if __name__ == "__main__":
