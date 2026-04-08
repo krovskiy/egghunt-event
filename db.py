@@ -1,17 +1,19 @@
 # TODO logging
-import random
 import sqlite3 as sqlite
+import typing
 from hashlib import sha256
 from pathlib import Path
 
-from pydantic import BaseModel
 import dotenv
+from pydantic import BaseModel
 
 SALT = str(dotenv.dotenv_values(".env")["SALT"])
-assert SALT is not None, "SALT is not set"
+assert SALT is not None, "SALT is not set"  # noqa: S101
+
 
 class DBError(Exception):
     pass
+
 
 class Egg(BaseModel):
     egg_id: str
@@ -84,7 +86,7 @@ class DB:
                                );
                            """
 
-    __DELETE_EGG_QUERY__ = f"""
+    __DELETE_EGG_QUERY__ = """
                            DELETE
                            FROM eyren
                            WHERE id = (?);"""
@@ -113,15 +115,16 @@ class DB:
         self.conn.commit()
         self.conn.close()
 
-    def __enter__(self,commit_after:bool=True):
+    def __enter__(self, commit_after: bool = True) -> typing.Self:
         try:
             self.__commit_after = commit_after
             self.conn = sqlite.connect(self.path)
-            return self
         except sqlite.Error as e:
             raise DBError(e) from e
+        else:
+            return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:  # noqa: ANN001
         if self.__commit_after:
             try:
                 self.conn.commit()
@@ -134,11 +137,10 @@ class DB:
         name: str,
         hint: str,
         author: str,
-        texture: str, # base64 encoded
+        texture: str,  # base64 encoded
         max_redeems: int = 1,
     ) -> tuple[bool, str]:
         """Adds an egg to the database, returns whether egg was added and it's id"""
-
 
         egg_id = sha256(name.encode() + author.encode() + SALT.encode()).hexdigest()
         try:
@@ -170,15 +172,16 @@ class DB:
             texture=ret[7],
         )
 
-    def redeem_egg(self,user_id: str|int, egg_id: str) -> bool:
+    def redeem_egg(self, user_id: str | int, egg_id: str) -> bool:
         uid = str(user_id)
         try:
             before = self.conn.total_changes
             self.conn.execute(self.__REDEEM_EGG_QUERY__, {"id": egg_id, "user_id": uid})
             self.conn.commit()
-            return self.conn.total_changes > before
-        except sqlite.OperationalError as e :
+        except sqlite.OperationalError as e:
             raise DBError(e) from e
+        else:
+            return self.conn.total_changes > before
 
     def delete_egg(self, egg_id: str) -> None:
         """Deletes an egg from the database"""
@@ -201,61 +204,22 @@ class DB:
     def get_user_eggs(self, user_id: str) -> list[Egg]:
         """Returns a list of all eggs in the database"""
         try:
-            user_eggs = []
-            eggs = self.conn.execute(self.__GET_USER_EGGS_QUERY__, (user_id,)).fetchall()
-            for egg_info in eggs:
-                user_eggs.append(
-                    Egg(
-                        egg_id=egg_info[0],
-                        name=egg_info[1],
-                        hint=egg_info[2],
-                        author=egg_info[3],
-                        max_redeems=egg_info[4],
-                        redeems=egg_info[5],
-                        created_at=egg_info[6],
-                        texture=egg_info[7],
-                    )
-                )
-            return user_eggs
+            eggs = self.conn.execute(
+                self.__GET_USER_EGGS_QUERY__, (user_id,)
+            ).fetchall()
         except sqlite.OperationalError as e:
             raise DBError(e) from e
-
-
-if __name__ == "__main__":
-    db = DB("db.db")
-    print(
-        "added",
-        db.add_egg(
-            name="Evil Egg",
-            hint="Commit some war crimes",
-            author="Gay Lord",
-            texture=random.randbytes(1024).decode(),
-        ),
-    )
-
-    print(
-        "added",
-        db.add_egg(
-            name="Test Egg",
-            hint="do some testing",
-            author="Test",
-            texture=random.randbytes(1024).decode(),
-        ),
-    )
-
-    print(
-        "added",
-        db.add_egg(
-            name="Chicken Egg",
-            hint="Bok Bok",
-            author="Hen",
-            texture=random.randbytes(1024).decode(),
-        ),
-    )
-
-    for e in db.list_eggs():
-        print(e.name)
-
-    print(db.redeem_egg("3211","8b9507c8d29347f8be1c3fbd2d0533e9"))
-    print("===")
-    print(*[x.name for x in db.get_user_eggs("1")],sep='\n')
+        else:
+            return [
+                Egg(
+                    egg_id=egg_info[0],
+                    name=egg_info[1],
+                    hint=egg_info[2],
+                    author=egg_info[3],
+                    max_redeems=egg_info[4],
+                    redeems=egg_info[5],
+                    created_at=egg_info[6],
+                    texture=egg_info[7],
+                )
+                for egg_info in eggs
+            ]
