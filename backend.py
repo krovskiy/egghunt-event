@@ -47,7 +47,7 @@ def my_eggs(user_id):
         ) for egg in eggs]),200
 
 @app.route("/api/redeem_egg", methods=['POST'])
-def redeem_egg():
+def redeem_egg() -> tuple[Response, int]:
 
     egg_id = request.json.get("egg_id")
     user_id = request.json.get("user_id")
