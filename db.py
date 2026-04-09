@@ -170,16 +170,20 @@ class DB:
             return self.conn.total_changes > before
         except sqlite.OperationalError:
             raise ValueError("Egg not found")
-
-    def create_egg(self, user_id: str|int, egg_id: str, name: str)
-
-    def delete_egg(self, egg_id: str) -> None:
-        """Deletes an egg from the database"""
+        
+    def create_egg(self, user_id: str|int, name: str, hint: str, texture: bytes, max_redeems: int = 1) -> tuple[bool, str]:
+        author = str(user_id)
         try:
-            self.conn.execute(self.__DELETE_EGG_QUERY__, (egg_id,))
-            self.conn.commit()
+            success, egg_id = self.add_egg(
+                name=name,
+                hint=hint,
+                author=author,
+                texture=texture,
+                max_redeems=max_redeems,
+            )
+            return success, egg_id
         except sqlite.OperationalError:
-            raise ValueError("Egg not found")
+            raise ValueError("Failed to create egg")
 
     def list_eggs(self) -> list[Egg]:
         """Returns a list of all eggs in the database"""
