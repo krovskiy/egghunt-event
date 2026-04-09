@@ -7,7 +7,7 @@ const textureInput = document.getElementById("eggTexture")
 const textureStatus = document.getElementById("textureStatus")
 
 const MODEL_PATH = '../assets/models/egg.glb';
-const DEFAULT_TEXTURE = '../textures/egg1.png';
+
 
 function loadEgg(container, texturePath) {
   const scene = new Scene();
@@ -60,7 +60,7 @@ function loadEgg(container, texturePath) {
     model.position.sub(center);
     
     const textureLoader = new TextureLoader();
-    const resolvedTexture = texturePath || DEFAULT_TEXTURE;
+    const resolvedTexture = texturePath;
     textureLoader.load(resolvedTexture, (texture) => {
       texture.repeat.set(2, 3);
       texture.wrapS = RepeatWrapping;
@@ -143,11 +143,11 @@ let currentTextureUrl = null;
 const reloadPreview = (textureUrl) => {
   if (!stageElement) return;
   stageElement.innerHTML = '';
-  loadEgg(stageElement, textureUrl || DEFAULT_TEXTURE);
+  loadEgg(stageElement, textureUrl);
 };
 
 if (stageElement) {
-  loadEgg(stageElement, DEFAULT_TEXTURE);
+  loadEgg(stageElement, "");
 }
 
 if (textureInput && textureStatus) {
