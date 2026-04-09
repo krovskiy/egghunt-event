@@ -1,15 +1,14 @@
 # TODO logging
-import random
 import sqlite3 as sqlite
+import typing
 from hashlib import sha256
 from pathlib import Path
 
-from pydantic import BaseModel
 import dotenv
+from pydantic import BaseModel
 
-
-SALT = "abc"# str(dotenv.dotenv_values(".env")["SALT"])
-assert SALT is not None, "SALT is not set"
+SALT = str(dotenv.dotenv_values(".env")["SALT"])
+assert SALT is not None, "SALT is not set"  # noqa: S101
 
 class DBError(Exception):
     pass
@@ -85,7 +84,7 @@ class DB:
                                );
                            """
 
-    __DELETE_EGG_QUERY__ = f"""
+    __DELETE_EGG_QUERY__ = """
                            DELETE
                            FROM eyren
                            WHERE id = (?);"""
@@ -114,14 +113,21 @@ class DB:
         self.conn.commit()
         self.conn.close()
 
-    def __enter__(self,commit_after:bool=True):
-        self.__commit_after = commit_after
-        self.conn = sqlite.connect(self.path)
-        return self
+    def __enter__(self, commit_after: bool = True) -> typing.Self:
+        try:
+            self.__commit_after = commit_after
+            self.conn = sqlite.connect(self.path)
+        except sqlite.Error as e:
+            raise DBError(e) from e
+        else:
+            return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:  # noqa: ANN001
         if self.__commit_after:
-            self.conn.commit()
+            try:
+                self.conn.commit()
+            except sqlite.Error as e:
+                raise DBError(e) from e
         self.conn.close()
 
     def add_egg(
@@ -169,16 +175,17 @@ class DB:
             texture=ret[7],
         )
 
-    def redeem_egg(self,user_id: str|int, egg_id: str) -> bool:
+    def redeem_egg(self, user_id: str | int, egg_id: str) -> bool:
         uid = str(user_id)
         try:
             before = self.conn.total_changes
             self.conn.execute(self.__REDEEM_EGG_QUERY__, {"id": egg_id, "user_id": uid})
             self.conn.commit()
+        except sqlite.OperationalError as e:
+            raise DBError(e) from e
+        else:
             return self.conn.total_changes > before
-        except sqlite.OperationalError:
-            raise ValueError("Egg not found")
-    
+
     def delete_egg(self, egg_id: str) -> None:
         """Deletes an egg from the database"""
         try:
@@ -189,28 +196,33 @@ class DB:
 
     def list_eggs(self) -> list[Egg]:
         """Returns a list of all eggs in the database"""
-        return [
-            self.get_egg(egg_id)
-            for (egg_id,) in self.conn.execute("SELECT id FROM eyren")
-        ]
+        try:
+            return [
+                self.get_egg(egg_id)
+                for (egg_id,) in self.conn.execute("SELECT id FROM eyren")
+            ]
+        except sqlite.OperationalError as e:
+            raise DBError(e) from e
 
     def get_user_eggs(self, user_id: str) -> list[Egg]:
         """Returns a list of all eggs in the database"""
         try:
-            user_eggs = []
-            eggs = self.conn.execute(self.__GET_USER_EGGS_QUERY__, (user_id,)).fetchall()
-            for egg_info in eggs:
-                user_eggs.append(
-                    Egg(
-                        egg_id=egg_info[0],
-                        name=egg_info[1],
-                        hint=egg_info[2],
-                        author=egg_info[3],
-                        max_redeems=egg_info[4],
-                        redeems=egg_info[5],
-                        created_at=egg_info[6],
-                        texture=egg_info[7],
-                    )
+            eggs = self.conn.execute(
+                self.__GET_USER_EGGS_QUERY__, (user_id,)
+            ).fetchall()
+        except sqlite.OperationalError as e:
+            raise DBError(e) from e
+        else:
+            return [
+                Egg(
+                    egg_id=egg_info[0],
+                    name=egg_info[1],
+                    hint=egg_info[2],
+                    author=egg_info[3],
+                    max_redeems=egg_info[4],
+                    redeems=egg_info[5],
+                    created_at=egg_info[6],
+                    texture=egg_info[7],
                 )
             return user_eggs
         except sqlite.OperationalError:
