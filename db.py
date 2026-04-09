@@ -1,14 +1,15 @@
 # TODO logging
 import sqlite3 as sqlite
 import typing
+import random
 from hashlib import sha256
 from pathlib import Path
 
 import dotenv
 from pydantic import BaseModel
 
-SALT = str(dotenv.dotenv_values(".env")["SALT"])
-assert SALT is not None, "SALT is not set"  # noqa: S101
+SALT = 'abc' #str(dotenv.dotenv_values(".env")["SALT"])
+#assert SALT is not None, "SALT is not set"  # noqa: S101
 
 class DBError(Exception):
     pass
@@ -207,27 +208,24 @@ class DB:
     def get_user_eggs(self, user_id: str) -> list[Egg]:
         """Returns a list of all eggs in the database"""
         try:
-            eggs = self.conn.execute(
-                self.__GET_USER_EGGS_QUERY__, (user_id,)
-            ).fetchall()
-        except sqlite.OperationalError as e:
-            raise DBError(e) from e
-        else:
-            return [
-                Egg(
-                    egg_id=egg_info[0],
-                    name=egg_info[1],
-                    hint=egg_info[2],
-                    author=egg_info[3],
-                    max_redeems=egg_info[4],
-                    redeems=egg_info[5],
-                    created_at=egg_info[6],
-                    texture=egg_info[7],
+            user_eggs = []
+            eggs = self.conn.execute(self.__GET_USER_EGGS_QUERY__, (user_id,)).fetchall()
+            for egg_info in eggs:
+                user_eggs.append(
+                    Egg(
+                        egg_id=egg_info[0],
+                        name=egg_info[1],
+                        hint=egg_info[2],
+                        author=egg_info[3],
+                        max_redeems=egg_info[4],
+                        redeems=egg_info[5],
+                        created_at=egg_info[6],
+                        texture=egg_info[7],
+                    )
                 )
             return user_eggs
         except sqlite.OperationalError:
             raise ValueError("User not found")
-
 
 if __name__ == "__main__":
     # couldn't intialize the db without opening first 

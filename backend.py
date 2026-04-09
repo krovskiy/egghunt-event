@@ -9,7 +9,6 @@ from flask.json import jsonify
 from db import DB
 app = Flask(__name__, static_folder='./src', static_url_path='/', template_folder='./src')
 
-
 @app.route("/")
 def index_static():
     return render_template("index.html")
@@ -26,14 +25,10 @@ def create_egg_static():
 def my_eggs_static():
     return render_template("/my-eggs/index.html")
 
-DEFAULT_MAX_REDEEMS = str(dotenv.dotenv_values(".env")["DEFAULT_MAX_REDEEMS"])
-
-app = Flask(__name__, static_folder="./textures")
-
+# DEFAULT_MAX_REDEEMS = str(dotenv.dotenv_values(".env")["DEFAULT_MAX_REDEEMS"])
 
 class TextureError(Exception):
     pass
-
 
 def prepare_texture(base64_data: str) -> Path:
     try:
@@ -48,38 +43,6 @@ def prepare_texture(base64_data: str) -> Path:
         raise TextureError(msg) from e
     else:
         return texture_path
-
-
-@app.route("/api/create_egg", methods=["POST"])
-def create_egg() -> tuple[Response, int]:
-    egg_name = request.json.get("egg_name")
-    egg_hint = request.json.get("egg_hint")
-    egg_author = request.json.get("egg_author")
-    egg_texture = request.json.get("egg_texture")  # base64 encoded image
-    user_id = request.json.get("user_id")
-    max_redeems = request.json.get("max_redeems", DEFAULT_MAX_REDEEMS)
-
-    if not egg_name or not egg_hint or not egg_texture:
-        return jsonify({"error": "Missing required fields"}), 418
-
-    if not egg_author and user_id:
-        egg_author = user_id
-    else:
-        return jsonify({"error": "Missing an author or user_id"}), 418
-
-    texture_path = prepare_texture(egg_texture)
-
-    with DB("db.db") as db:
-        success, egg_id = db.add_egg(
-            name=egg_name,
-            hint=egg_hint,
-            author=egg_author,
-            texture=str(texture_path.relative_to(".")),
-            max_redeems=max_redeems,
-        )
-
-    return jsonify({"success": success, "egg_id": egg_id}), 200 if success else 400
-
 
 @app.route("/api/list_eggs", methods=["GET"])
 def list_eggs() -> tuple[Response, int]:
