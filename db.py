@@ -131,7 +131,7 @@ class DB:
     ) -> tuple[bool, str]:
         """Adds an egg to the database, returns whether egg was added and it's id"""
 
-        # encoded added - dima
+        # encoded added - dima BECAUSE OTHERWISE I CANT INIT
         import base64
         texture_b64 = base64.b64encode(texture).decode()
 
@@ -170,20 +170,6 @@ class DB:
             return self.conn.total_changes > before
         except sqlite.OperationalError:
             raise ValueError("Egg not found")
-        
-    def create_egg(self, user_id: str|int, name: str, hint: str, texture: bytes, max_redeems: int = 1) -> tuple[bool, str]:
-        author = str(user_id)
-        try:
-            success, egg_id = self.add_egg(
-                name=name,
-                hint=hint,
-                author=author,
-                texture=texture,
-                max_redeems=max_redeems,
-            )
-            return success, egg_id
-        except sqlite.OperationalError:
-            raise ValueError("Failed to create egg")
 
     def list_eggs(self) -> list[Egg]:
         """Returns a list of all eggs in the database"""
@@ -218,7 +204,7 @@ class DB:
 if __name__ == "__main__":
     # couldn't intialize the db without opening first 
     with DB("db.db") as db:
-            
+        
         print(
             "added",
             db.add_egg(
