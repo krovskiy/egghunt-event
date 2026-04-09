@@ -126,17 +126,20 @@ class DB:
         name: str,
         hint: str,
         author: str,
-        texture: str, # base64 encoded
+        texture: bytes, # base64 encoded
         max_redeems: int = 1,
     ) -> tuple[bool, str]:
         """Adds an egg to the database, returns whether egg was added and it's id"""
 
+        # encoded added - dima
+        import base64
+        texture_b64 = base64.b64encode(texture).decode()
 
         egg_id = sha256(name.encode() + author.encode() + SALT.encode()).hexdigest()
         try:
             self.conn.execute(
                 self.__EGG_INSERT_QUERY__,
-                (egg_id, name, hint, author, max_redeems, texture),
+                (egg_id, name, hint, author, max_redeems, texture_b64),
             )
             self.conn.commit()
         except sqlite.IntegrityError:
@@ -147,7 +150,6 @@ class DB:
 
     def get_egg(self, egg_id: str) -> Egg:
         ret = self.conn.execute(self.__GET_EGGS_QUERY__, (egg_id,)).fetchone()
-
         return Egg(
             egg_id=ret[0],
             name=ret[1],
@@ -168,6 +170,8 @@ class DB:
             return self.conn.total_changes > before
         except sqlite.OperationalError:
             raise ValueError("Egg not found")
+
+    def create_egg(self, user_id: str|int, egg_id: str, name: str)
 
     def delete_egg(self, egg_id: str) -> None:
         """Deletes an egg from the database"""
@@ -208,40 +212,42 @@ class DB:
 
 
 if __name__ == "__main__":
-    db = DB("db.db")
-    print(
-        "added",
-        db.add_egg(
-            name="Evil Egg",
-            hint="Commit some war crimes",
-            author="Gay Lord",
-            texture=random.randbytes(1024).decode(),
-        ),
-    )
+    # couldn't intialize the db without opening first 
+    with DB("db.db") as db:
+            
+        print(
+            "added",
+            db.add_egg(
+                name="Evil Egg",
+                hint="Commit some war crimes",
+                author="Gay Lord",
+                texture=random.randbytes(1024),
+            ),
+        )
 
-    print(
-        "added",
-        db.add_egg(
-            name="Test Egg",
-            hint="do some testing",
-            author="Test",
-            texture=random.randbytes(1024).decode(),
-        ),
-    )
+        print(
+            "added",
+            db.add_egg(
+                name="Test Egg",
+                hint="do some testing",
+                author="Test",
+                texture=random.randbytes(1024),
+            ),
+        )
 
-    print(
-        "added",
-        db.add_egg(
-            name="Chicken Egg",
-            hint="Bok Bok",
-            author="Hen",
-            texture=random.randbytes(1024).decode(),
-        ),
-    )
+        print(
+            "added",
+            db.add_egg(
+                name="Chicken Egg",
+                hint="Bok Bok",
+                author="Hen",
+                texture=random.randbytes(1024),
+            ),
+        )
 
-    for e in db.list_eggs():
-        print(e.name)
+        for e in db.list_eggs():
+            print(e.name)
 
-    print(db.redeem_egg("3211","8b9507c8d29347f8be1c3fbd2d0533e9"))
-    print("===")
-    print(*[x.name for x in db.get_user_eggs("1")],sep='\n')
+        print(db.redeem_egg("3211","8b9507c8d29347f8be1c3fbd2d0533e9"))
+        print("===")
+        print(*[x.name for x in db.get_user_eggs("1")],sep='\n')
