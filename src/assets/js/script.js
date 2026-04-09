@@ -1,4 +1,4 @@
-import { Scene, PerspectiveCamera, WebGLRenderer, AmbientLight, DirectionalLight, TextureLoader, RepeatWrapping, Box3, Vector3 } from 'https://cdn.jsdelivr.net/npm/three@0.182.0/+esm';
+import { Scene, PerspectiveCamera, WebGLRenderer, AmbientLight, DirectionalLight, TextureLoader, RepeatWrapping, Box3, Vector3, Group } from 'https://cdn.jsdelivr.net/npm/three@0.182.0/+esm';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/loaders/GLTFLoader.js/+esm';
 import { MeshoptDecoder } from 'https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/libs/meshopt_decoder.module.js/+esm';
 
@@ -28,10 +28,21 @@ function loadEgg(container, texturePath) {
   light.position.set(2, 3, 4);
   scene.add(light);
 
+  let model = null;
+  let pivot = null;
+  let rotationY = 0;
+  let isDragging = false;
+  let didDrag = false;
+  let lastX = 0;
+  let dragStartX = 0;
+  let lastDragTime = 0;
+  const autoRotateDelayMs = 900;
+  const autoRotateSpeed = 0.003;
+
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
   loader.load(MODEL_PATH, (gltf) => {
-    const model = gltf.scene;
+    model = gltf.scene;
     model.scale.setScalar(4);
     
     // Center the model by calculating bounding box and offsetting position
@@ -54,16 +65,59 @@ function loadEgg(container, texturePath) {
       });
     });
     
-    scene.add(model);
+    pivot = new Group();
+    pivot.add(model);
+    scene.add(pivot);
   });
 
-  let cameraAngle = 0;
+  renderer.domElement.style.cursor = 'grab';
+  renderer.domElement.addEventListener('pointerdown', (event) => {
+    isDragging = true;
+    didDrag = false;
+    lastX = event.clientX;
+    dragStartX = event.clientX;
+    lastDragTime = performance.now();
+    renderer.domElement.setPointerCapture(event.pointerId);
+    renderer.domElement.style.cursor = 'grabbing';
+  });
+
+  renderer.domElement.addEventListener('pointermove', (event) => {
+    if (!isDragging || !model) return;
+    const deltaX = event.clientX - lastX;
+    lastX = event.clientX;
+    rotationY += deltaX * 0.01;
+    if (Math.abs(event.clientX - dragStartX) > 4) {
+      didDrag = true;
+    }
+    lastDragTime = performance.now();
+  });
+
+  renderer.domElement.addEventListener('pointerup', (event) => {
+    isDragging = false;
+    lastDragTime = performance.now();
+    renderer.domElement.releasePointerCapture(event.pointerId);
+    renderer.domElement.style.cursor = 'grab';
+    if (didDrag) {
+      container.dataset.dragged = 'true';
+    }
+  });
+
+  renderer.domElement.addEventListener('pointerleave', () => {
+    isDragging = false;
+    lastDragTime = performance.now();
+    renderer.domElement.style.cursor = 'grab';
+  });
+
   function animate() {
     requestAnimationFrame(animate);
-    
-    cameraAngle += 0.01;
-    camera.position.x = Math.cos(cameraAngle) * 6;
-    camera.position.z = Math.sin(cameraAngle) * 6;
+
+    if (pivot) {
+      if (!isDragging && performance.now() - lastDragTime > autoRotateDelayMs) {
+        rotationY += autoRotateSpeed;
+      }
+      pivot.rotation.y = rotationY;
+    }
+
     camera.lookAt(0, 0, 0);
     
     renderer.render(scene, camera);
@@ -85,7 +139,7 @@ function buildGrid() {
       </div>
       <div class="egg-info">
         <div class="egg-name">${egg.name}</div>
-        <div class="egg-creator">${egg.creator} <img class="creator-img" src="https://www.gravatar.com/avatar/359e957a7aa4fda8393c1d5340e6c239?s=64&d=identicon&r=PG&f=y&so-version=2"/></div>
+        <div class="egg-creator">Uploaded by: ${egg.creator} <img class="creator-img" src="https://www.gravatar.com/avatar/359e957a7aa4fda8393c1d5340e6c239?s=64&d=identicon&r=PG&f=y&so-version=2"/></div>
 
       </div>
     `;
@@ -100,6 +154,10 @@ function buildGrid() {
 document.getElementById("eggGrid").addEventListener("click", (event) => {
   const stage = event.target.closest(".egg-stage");
   if (!stage) return;
+  if (stage.dataset.dragged === 'true') {
+    stage.dataset.dragged = '';
+    return;
+  }
 
   const id = stage.id; // e.g. "egg-3"
   console.log("Clicked:", id);
