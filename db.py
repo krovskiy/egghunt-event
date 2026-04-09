@@ -10,10 +10,8 @@ from pydantic import BaseModel
 SALT = str(dotenv.dotenv_values(".env")["SALT"])
 assert SALT is not None, "SALT is not set"  # noqa: S101
 
-
 class DBError(Exception):
     pass
-
 
 class Egg(BaseModel):
     egg_id: str
@@ -137,16 +135,20 @@ class DB:
         name: str,
         hint: str,
         author: str,
-        texture: str,  # base64 encoded
+        texture: bytes, # base64 encoded
         max_redeems: int = 1,
     ) -> tuple[bool, str]:
         """Adds an egg to the database, returns whether egg was added and it's id"""
+
+        # encoded added - dima BECAUSE OTHERWISE I CANT INIT
+        import base64
+        texture_b64 = base64.b64encode(texture).decode()
 
         egg_id = sha256(name.encode() + author.encode() + SALT.encode()).hexdigest()
         try:
             self.conn.execute(
                 self.__EGG_INSERT_QUERY__,
-                (egg_id, name, hint, author, max_redeems, texture),
+                (egg_id, name, hint, author, max_redeems, texture_b64),
             )
             self.conn.commit()
         except sqlite.IntegrityError:
@@ -156,11 +158,12 @@ class DB:
         return True, egg_id
 
     def get_egg(self, egg_id: str) -> Egg:
+        
         try:
             ret = self.conn.execute(self.__GET_EGGS_QUERY__, (egg_id,)).fetchone()
         except sqlite.OperationalError as e:
             raise DBError(e) from e
-
+        
         return Egg(
             egg_id=ret[0],
             name=ret[1],
@@ -221,5 +224,48 @@ class DB:
                     created_at=egg_info[6],
                     texture=egg_info[7],
                 )
-                for egg_info in eggs
-            ]
+            return user_eggs
+        except sqlite.OperationalError:
+            raise ValueError("User not found")
+
+
+if __name__ == "__main__":
+    # couldn't intialize the db without opening first 
+    with DB("db.db") as db:
+        
+        print(
+            "added",
+            db.add_egg(
+                name="Evil Egg",
+                hint="Commit some war crimes",
+                author="Gay Lord",
+                texture=random.randbytes(1024),
+            ),
+        )
+
+        print(
+            "added",
+            db.add_egg(
+                name="Test Egg",
+                hint="do some testing",
+                author="Test",
+                texture=random.randbytes(1024),
+            ),
+        )
+
+        print(
+            "added",
+            db.add_egg(
+                name="Chicken Egg",
+                hint="Bok Bok",
+                author="Hen",
+                texture=random.randbytes(1024),
+            ),
+        )
+
+        for e in db.list_eggs():
+            print(e.name)
+
+        print(db.redeem_egg("3211","8b9507c8d29347f8be1c3fbd2d0533e9"))
+        print("===")
+        print(*[x.name for x in db.get_user_eggs("1")],sep='\n')
