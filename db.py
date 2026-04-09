@@ -7,9 +7,12 @@ from pathlib import Path
 from pydantic import BaseModel
 import dotenv
 
+
 SALT = "abc"# str(dotenv.dotenv_values(".env")["SALT"])
 assert SALT is not None, "SALT is not set"
 
+class DBError(Exception):
+    pass
 
 class Egg(BaseModel):
     egg_id: str
@@ -149,7 +152,12 @@ class DB:
         return True, egg_id
 
     def get_egg(self, egg_id: str) -> Egg:
-        ret = self.conn.execute(self.__GET_EGGS_QUERY__, (egg_id,)).fetchone()
+        
+        try:
+            ret = self.conn.execute(self.__GET_EGGS_QUERY__, (egg_id,)).fetchone()
+        except sqlite.OperationalError as e:
+            raise DBError(e) from e
+        
         return Egg(
             egg_id=ret[0],
             name=ret[1],
@@ -170,6 +178,14 @@ class DB:
             return self.conn.total_changes > before
         except sqlite.OperationalError:
             raise ValueError("Egg not found")
+    
+    def delete_egg(self, egg_id: str) -> None:
+        """Deletes an egg from the database"""
+        try:
+            self.conn.execute(self.__DELETE_EGG_QUERY__, (egg_id,))
+            self.conn.commit()
+        except sqlite.OperationalError as e:
+            raise DBError(e) from e
 
     def list_eggs(self) -> list[Egg]:
         """Returns a list of all eggs in the database"""
