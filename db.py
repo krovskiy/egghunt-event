@@ -228,7 +228,7 @@ class DB:
     def like_egg(self, user_id: str, egg_id: str) -> None:
         try:
             self.conn.execute(
-                self.__DISLIKE_EGG_QUERY__, {"id": egg_id, "user_id": user_id}
+                self.__LIKE_EGG_QUERY__, {"id": egg_id, "user_id": user_id}
             )
             self.conn.commit()
         except Exception as e:
