@@ -41,8 +41,52 @@ class DB:
                              created_at  TEXT             DEFAULT CURRENT_TIMESTAMP,
                              redeemed_users TEXT DEFAULT '',
                              texture     TEXT
+                             likes       TEXT
+                             dislikes    TEXT
                          );
                          """
+
+    __LIKE_EGG_QUERY__ = """
+                        UPDATE eyren
+                        SET liked_users =
+                            CASE
+                                WHEN liked_users = '' OR liked_users IS NULL
+                                    THEN :user_id
+                                ELSE liked_users || ',' || :user_id
+                            END
+                        WHERE id = :id
+                          AND (
+                              liked_users IS NULL
+                                  OR liked_users = ''
+                                  OR ',' || liked_users || ',' NOT LIKE '%,' || :user_id || ',%'
+                          )
+                          AND (
+                              disliked_users IS NULL
+                                  OR disliked_users = ''
+                                  OR ',' || disliked_users || ',' NOT LIKE '%,' || :user_id || ',%'
+                          );
+                        """
+
+    __DISLIKE_EGG_QUERY__ = """
+                           UPDATE eyren
+                           SET disliked_users =
+                               CASE
+                                   WHEN disliked_users = '' OR disliked_users IS NULL
+                                       THEN :user_id
+                                   ELSE disliked_users || ',' || :user_id
+                               END
+                           WHERE id = :id
+                             AND (
+                                 disliked_users IS NULL
+                                     OR disliked_users = ''
+                                     OR ',' || disliked_users || ',' NOT LIKE '%,' || :user_id || ',%'
+                             )
+                             AND (
+                                 liked_users IS NULL
+                                     OR liked_users = ''
+                                     OR ',' || liked_users || ',' NOT LIKE '%,' || :user_id || ',%'
+                             );
+                           """
 
     __EGG_INSERT_QUERY__ = """
                            INSERT INTO eyren
@@ -63,7 +107,7 @@ class DB:
                                 max_redeems,
                                 redeems,
                                 created_at,
-                                texture
+                                texture,
                          FROM eyren
                          WHERE id = (?);
                          """
@@ -78,6 +122,7 @@ class DB:
                                        ELSE redeemed_users || ',' || :user_id
                                        END
                            WHERE id = :id
+                             AND author != :user_id
                              AND redeems < max_redeems
                              AND (
                                redeemed_users IS NULL
@@ -171,6 +216,24 @@ class DB:
             texture=ret[7],
         )
 
+    def dislike_egg(self, user_id: str, egg_id: str) -> None:
+        try:
+            self.conn.execute(
+                self.__DISLIKE_EGG_QUERY__, {"id": egg_id, "user_id": user_id}
+            )
+            self.conn.commit()
+        except Exception as e:
+            raise DBError(e) from e
+
+    def like_egg(self, user_id: str, egg_id: str) -> None:
+        try:
+            self.conn.execute(
+                self.__DISLIKE_EGG_QUERY__, {"id": egg_id, "user_id": user_id}
+            )
+            self.conn.commit()
+        except Exception as e:
+            raise DBError(e) from e
+
     def redeem_egg(self, user_id: str | int, egg_id: str) -> bool:
         uid = str(user_id)
         try:
@@ -222,3 +285,9 @@ class DB:
                 )
                 for egg_info in eggs
             ]
+
+
+if __name__ == "__main__":
+    db = DB("db.db")
+    with db as db:
+        db.add_egg("test", "test", "test", "test", -1)
