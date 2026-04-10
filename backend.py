@@ -2,35 +2,42 @@ import base64
 from hashlib import md5
 from pathlib import Path
 
-import dotenv
-from flask import Flask, request, Response, render_template
+from flask import Flask, Response, render_template, request
 from flask.json import jsonify
 
 from db import DB
-app = Flask(__name__, static_folder='./src', static_url_path='/', template_folder='./src')
+
+app = Flask(
+    __name__, static_folder="./src", static_url_path="/", template_folder="./src"
+)
+FLASK_ROOT = app.root_path
+
 
 @app.route("/")
-def index_static():
+def index_static() -> str:
     return render_template("index.html")
 
+
 @app.route("/rules")
-def rules_static():
+def rules_static() -> str:
     return render_template("/rules/index.html")
 
+
 @app.route("/create-egg")
-def create_egg_static():
+def create_egg_static() -> str:
     return render_template("/create-egg/index.html")
 
+
 @app.route("/my-eggs")
-def my_eggs_static():
+def my_eggs_static() -> str:
     return render_template("/my-eggs/index.html")
 
-# DEFAULT_MAX_REDEEMS = str(dotenv.dotenv_values(".env")["DEFAULT_MAX_REDEEMS"])
 
 class TextureError(Exception):
     pass
 
-def prepare_texture(base64_data: str) -> Path:
+
+def prepare_texture(base64_data: str) -> str:
     try:
         texture_parts = base64_data.split(";base64,")
         texture_type = texture_parts[0].split("image/")[-1]
@@ -42,16 +49,15 @@ def prepare_texture(base64_data: str) -> Path:
         msg = f"Failed to prepare texture: {e}"
         raise TextureError(msg) from e
     else:
-        return texture_path
+        return texture_path.relative_to(FLASK_ROOT).as_posix()
+
 
 @app.route("/api/list_eggs", methods=["GET"])
 def list_eggs() -> tuple[Response, int]:
     with DB("db.db") as db:
         eggs = db.list_eggs()
 
-    return jsonify([egg.model_dump(
-        #exclude={"egg_id"}
-        ) for egg in eggs]),200
+    return jsonify([egg.model_dump(exclude={"egg_id"}) for egg in eggs]), 200
 
 
 @app.route("/api/user/<user_id>/my_eggs", methods=["GET"])
@@ -59,11 +65,10 @@ def my_eggs(user_id: str) -> tuple[Response, int]:
     with DB("db.db") as db:
         eggs = db.get_user_eggs(user_id)
 
-    return jsonify([egg.model_dump(
-        #exclude={"egg_id"}
-        ) for egg in eggs]),200
+    return jsonify([egg.model_dump(exclude={"egg_id"}) for egg in eggs]), 200
 
-@app.route("/api/redeem_egg", methods=['POST'])
+
+@app.route("/api/redeem_egg", methods=["POST"])
 def redeem_egg() -> tuple[Response, int]:
 
     egg_id = request.json.get("egg_id")
@@ -82,8 +87,8 @@ def redeem_egg() -> tuple[Response, int]:
 
 
 # added by dima;  adds a created egg to the db
-@app.route("/api/create_egg", methods=['POST'])
-def create_egg():
+@app.route("/api/create_egg", methods=["POST"])
+def create_egg() -> tuple[Response, int]:
     data = request.json
     if not data:
         return jsonify({"error": "Missing JSON body"}), 400
@@ -91,8 +96,10 @@ def create_egg():
     user_id = data.get("user_id")
     name = data.get("name")
     hint = data.get("hint")
-    texture = data.get("texture", "").encode()
+    texture = data.get("texture")
     max_redeems = data.get("max_redeems", 1)
+
+    texture_path = prepare_texture(texture)
 
     if not all([user_id, name, hint, texture]):
         return jsonify({"error": "user_id, name, hint and texture are required"}), 400
@@ -102,11 +109,44 @@ def create_egg():
             name=name,
             hint=hint,
             author=user_id,
-            texture=texture,
+            texture=texture_path,
             max_redeems=max_redeems,
         )
-    
+
     return jsonify({"success": success, "egg_id": egg_id}), 200
+
+
+@app.route("/api/delete_egg/<egg_id>", methods=["DELETE"])
+def delete_egg(egg_id: str) -> tuple[Response, int]:
+    with DB("db.db") as db:
+        db.delete_egg(egg_id)
+    return jsonify({"success": True}), 200
+
+
+@app.route("/api/like_egg", methods=["POST"])
+def like_egg() -> tuple[Response, int]:
+    data = request.json
+    user_id = data.get("user_id")
+    egg_id = data.get("egg_id")
+    if not all([user_id, egg_id]):
+        return jsonify({"error": "user_id and egg_id are required"}), 400
+
+    with DB("db.db") as db:
+        db.like_egg(user_id, egg_id)
+        return jsonify({"success": True}), 200
+
+
+@app.route("/api/dislike_egg", methods=["POST"])
+def dislike_egg() -> tuple[Response, int]:
+    data = request.json
+    user_id = data.get("user_id")
+    egg_id = data.get("egg_id")
+    if not all([user_id, egg_id]):
+        return jsonify({"error": "user_id and egg_id are required"}), 400
+
+    with DB("db.db") as db:
+        db.dislike_egg(user_id, egg_id)
+        return jsonify({"success": True}), 200
 
 
 if __name__ == "__main__":
