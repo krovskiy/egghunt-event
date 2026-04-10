@@ -2,8 +2,17 @@ import base64
 from hashlib import md5
 from pathlib import Path
 
-from flask import Flask, Response, render_template, request
+import dotenv
+from flask import (
+    Flask,
+    Response,
+    make_response,
+    redirect,
+    render_template,
+    request,
+)
 from flask.json import jsonify
+from requests import get, post
 
 from db import DB
 
@@ -12,6 +21,52 @@ app = Flask(
 )
 FLASK_ROOT = app.root_path
 
+CLIENT_ID = dotenv.dotenv_values(".env")["DISCORD_CLIENT_ID"]
+CLIENT_SECRET = dotenv.dotenv_values(".env")["DISCORD_SECRET"]
+REDIRECT_URI = dotenv.dotenv_values(".env")["REDIRECT_URI"]
+CALLBACK_URI = "http://localhost:5000/callback/discord"
+
+
+def verify_discord_token(access_token: str) -> tuple[bool, dict | None]:
+    url = "https://discord.com/api/users/@me"
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    r = get(url, headers=headers)
+
+    if r.status_code == 200:
+        return True, r.json()  # token is valid → return user info
+    return False, None  # token invalid or expired
+
+
+def exchange_code(code: str) -> dict:
+    data = {
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": CALLBACK_URI,
+    }
+
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+    response = post("https://discord.com/api/oauth2/token", data=data, headers=headers)
+    return response.json()
+
+
+@app.route("/login")
+def login_redirect() -> Response:
+    return redirect(
+        REDIRECT_URI,
+        302,
+    )
+
+
+@app.route("/callback/discord")
+def auth() -> Response:
+    resp = make_response(redirect("/"))
+    token = exchange_code(request.args.get("code"))["access_token"]
+    resp.set_cookie("discord_token", token)
+    return resp
 
 @app.route("/")
 def index_static() -> str:
@@ -60,8 +115,14 @@ def list_eggs() -> tuple[Response, int]:
     return jsonify([egg.model_dump(exclude={"egg_id"}) for egg in eggs]), 200
 
 
-@app.route("/api/user/<user_id>/my_eggs", methods=["GET"])
-def my_eggs(user_id: str) -> tuple[Response, int]:
+@app.route("/api/my_eggs", methods=["GET"])
+def my_eggs() -> tuple[Response, int]:
+
+    allowed, user_data = verify_discord_token(request.cookies.get("discord_token"))
+    if not allowed:
+        return jsonify({"error": "Invalid token"}), 401
+    user_id = user_data["id"]
+
     with DB("db.db") as db:
         eggs = db.get_user_eggs(user_id)
 
