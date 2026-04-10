@@ -107,7 +107,7 @@ class DB:
                                 max_redeems,
                                 redeems,
                                 created_at,
-                                texture,
+                                texture
                          FROM eyren
                          WHERE id = (?);
                          """
