@@ -307,7 +307,7 @@ a {
 .egg-grid {
   padding: 60px;
   display: grid;
-  border: solid;
+
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 12px;
 }
@@ -342,6 +342,60 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+
+.egg-container:hover .egg-stage::after {
+  opacity: 1;
+}
+
+.egg-actions {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%) translateY(6px);
+  display: flex;
+  gap: 10px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.egg-container:hover .egg-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+
+.egg-action {
+  border: none;
+  padding: 12px;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.egg-action:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
+  filter: brightness(1.05);
+}
+
+.egg-action:active {
+  background-color: violet;
+  transform: translateX(1px);
+}
+
+.egg-like {
+  background: rgb(9, 255, 0);
+}
+
+.egg-dislike {
+  background: red;
 }
 
 .egg canvas {
@@ -756,8 +810,8 @@ a {
 }
 
 .create-egg-form input[type="submit"]:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 12px 24px rgba(255, 105, 180, 0.4);
+
+  box-shadow: 0 0px 12px rgba(255, 105, 180, 0.4);
 }
 
 @media (max-width: 900px) {
@@ -768,6 +822,9 @@ a {
 
 
 @media (max-width: 720px) {
+  .rules-container{
+    grid-template-columns: minmax(280px, 1fr);
+  }
   .options {
     flex-wrap: wrap;
     justify-content: center;

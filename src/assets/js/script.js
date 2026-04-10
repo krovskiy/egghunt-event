@@ -136,6 +136,10 @@ function buildGrid() {
 
     card.innerHTML = `
       <div class="egg-stage" id="egg-${egg.id}">
+        <div class="egg-actions">
+          <button class="egg-action egg-like" type="button">GOOD</button>
+          <button class="egg-action egg-dislike" type="button">BAD</button>
+        </div>
       </div>
       <div class="egg-info">
         <div class="egg-name">${egg.name}</div>
@@ -148,10 +152,22 @@ function buildGrid() {
 
     const stageElement = card.querySelector(`.egg-stage`);
     loadEgg(stageElement, egg.texture);
+
+    const likeButton = card.querySelector('.egg-like');
+    const dislikeButton = card.querySelector('.egg-dislike');
+    likeButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      console.log('Like:', egg.id); // WE HAVE TO CHANGE THIS
+    });
+    dislikeButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      console.log('Dislike:', egg.id); // WE HAVE TO CHANGE THIS
+    });
   });
 }
 
 document.getElementById("eggGrid").addEventListener("click", (event) => {
+  if (event.target.closest('.egg-action')) return;
   const stage = event.target.closest(".egg-stage");
   if (!stage) return;
   if (stage.dataset.dragged === 'true') {
