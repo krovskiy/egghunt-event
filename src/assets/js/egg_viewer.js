@@ -85,12 +85,12 @@ export function loadEgg(container, texturePath, options = {}) {
 
     const textureLoader = new TextureLoader();
     textureLoader.load(texturePath, (texture) => {
-      texture.repeat.set(repeatNumber-1, repeatNumber);
+      texture.repeat.set(repeatNumber - 1, repeatNumber);
       texture.wrapS = RepeatWrapping;
       texture.wrapT = RepeatWrapping;
 
       model.traverse((child) => {
-        if (child.isMesh) {
+        if (child.isMesh && child.material) {
           child.material.map = texture;
           child.material.needsUpdate = true;
         }
@@ -106,18 +106,21 @@ export function loadEgg(container, texturePath, options = {}) {
     }
   });
 
-  renderer.domElement.style.cursor = 'grab';
-  renderer.domElement.addEventListener('pointerdown', (event) => {
+  const domElement = renderer.domElement;
+  domElement.style.cursor = 'grab';
+  const now = () => performance.now();
+
+  domElement.addEventListener('pointerdown', (event) => {
     isDragging = true;
     didDrag = false;
     lastX = event.clientX;
     dragStartX = event.clientX;
-    lastDragTime = performance.now();
-    renderer.domElement.setPointerCapture(event.pointerId);
-    renderer.domElement.style.cursor = 'grabbing';
+    lastDragTime = now();
+    domElement.setPointerCapture(event.pointerId);
+    domElement.style.cursor = 'grabbing';
   });
 
-  renderer.domElement.addEventListener('pointermove', (event) => {
+  domElement.addEventListener('pointermove', (event) => {
     if (!isDragging || !model) return;
     const deltaX = event.clientX - lastX;
     lastX = event.clientX;
@@ -125,39 +128,42 @@ export function loadEgg(container, texturePath, options = {}) {
     if (Math.abs(event.clientX - dragStartX) > 4) {
       didDrag = true;
     }
-    lastDragTime = performance.now();
+    lastDragTime = now();
   });
 
-  renderer.domElement.addEventListener('pointerup', (event) => {
+  domElement.addEventListener('pointerup', (event) => {
     isDragging = false;
-    lastDragTime = performance.now();
-    renderer.domElement.releasePointerCapture(event.pointerId);
-    renderer.domElement.style.cursor = 'grab';
+    lastDragTime = now();
+    domElement.releasePointerCapture(event.pointerId);
+    domElement.style.cursor = 'grab';
     if (didDrag) {
       container.dataset.dragged = 'true';
     }
   });
 
-  renderer.domElement.addEventListener('pointerleave', () => {
+  domElement.addEventListener('pointerleave', () => {
     isDragging = false;
-    lastDragTime = performance.now();
-    renderer.domElement.style.cursor = 'grab';
+    lastDragTime = now();
+    domElement.style.cursor = 'grab';
   });
 
+  let animating = true;
+
   function animate() {
+    if (!animating) return;
     requestAnimationFrame(animate);
 
     if (pivot) {
-      if (!isDragging && performance.now() - lastDragTime > autoRotateDelayMs) {
+      if (!isDragging && now() - lastDragTime > autoRotateDelayMs) {
         rotationY += autoRotateSpeed;
       }
       pivot.rotation.y = rotationY;
     }
 
-    camera.lookAt(0, 0, 0);
-
     renderer.render(scene, camera);
   }
 
   animate();
+
+  return () => { animating = false; };
 }
