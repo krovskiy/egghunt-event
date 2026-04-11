@@ -186,11 +186,20 @@ def delete_egg(egg_id: str) -> tuple[Response, int]:
 
 @app.route("/api/like_egg", methods=["POST"])
 def like_egg() -> tuple[Response, int]:
-    data = request.json
-    user_id = data.get("user_id")
+    token = request.cookies.get("discord_token")
+    if not token:
+        return jsonify({"error": "No token"}), 401
+
+    allowed, user_data = verify_discord_token(token)
+    if not allowed:
+        return jsonify({"error": "Invalid token"}), 401
+
+    data = request.json or {}
     egg_id = data.get("egg_id")
-    if not all([user_id, egg_id]):
-        return jsonify({"error": "user_id and egg_id are required"}), 400
+    if not egg_id:
+        return jsonify({"error": "egg_id is required"}), 400
+
+    user_id = user_data["id"]
 
     with DB("db.db") as db:
         db.like_egg(user_id, egg_id)
@@ -199,16 +208,51 @@ def like_egg() -> tuple[Response, int]:
 
 @app.route("/api/dislike_egg", methods=["POST"])
 def dislike_egg() -> tuple[Response, int]:
-    data = request.json
-    user_id = data.get("user_id")
+    token = request.cookies.get("discord_token")
+    if not token:
+        return jsonify({"error": "No token"}), 401
+
+    allowed, user_data = verify_discord_token(token)
+    if not allowed:
+        return jsonify({"error": "Invalid token"}), 401
+
+    data = request.json or {}
     egg_id = data.get("egg_id")
-    if not all([user_id, egg_id]):
-        return jsonify({"error": "user_id and egg_id are required"}), 400
+    if not egg_id:
+        return jsonify({"error": "egg_id is required"}), 400
+
+    user_id = user_data["id"]
 
     with DB("db.db") as db:
         db.dislike_egg(user_id, egg_id)
         return jsonify({"success": True}), 200
 
+
+# add by dima, log in function -> returns: image, username, global_name FOR TESTING
+@app.route("/api/me")
+def me() -> tuple[Response, int]:
+
+    token = request.cookies.get("discord_token")
+    if not token:
+        return jsonify({"error": "No token"}), 401
+
+    allowed, user_data = verify_discord_token(token)
+
+    if not allowed:
+        return jsonify({"error": "Invalid token"}), 401
+    
+    return jsonify({
+        "id": user_data["id"],
+        "username": user_data["username"],
+        "global_name": user_data.get("global_name"),
+        "avatar": user_data["avatar"]
+    }), 200
+
+@app.route("/logout")
+def logout():
+    resp = make_response(redirect("/"))
+    resp.set_cookie("discord_token", "", expires=0, path="/")
+    return resp
 
 if __name__ == "__main__":
     app.run(debug=True)  # noqa: S201
