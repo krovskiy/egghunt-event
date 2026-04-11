@@ -80,7 +80,8 @@ def rules_static() -> str:
 
 @app.route("/create-egg")
 def create_egg_static() -> str:
-    return render_template("/create-egg/index.html")
+    edit_id = request.args.get("edit")
+    return render_template("/create-egg/index.html", edit_id=edit_id)
 
 
 @app.route("/my-eggs")
@@ -91,20 +92,21 @@ def my_eggs_static() -> str:
 class TextureError(Exception):
     pass
 
-
 def prepare_texture(base64_data: str) -> str:
     try:
         texture_parts = base64_data.split(";base64,")
         texture_type = texture_parts[0].split("image/")[-1]
         texture_data = base64.b64decode(texture_parts[1])
         texture_hash = md5(texture_data).hexdigest()  # noqa: S324
-        texture_path = Path("textures") / f"{texture_hash}.{texture_type}"
+        texture_dir = Path(FLASK_ROOT) / "src" / "textures"
+        texture_dir.mkdir(parents=True, exist_ok=True)
+        texture_path = texture_dir / f"{texture_hash}.{texture_type}"  # path creation in case there is not
         texture_path.write_bytes(texture_data)
     except Exception as e:
         msg = f"Failed to prepare texture: {e}"
         raise TextureError(msg) from e
     else:
-        return texture_path.relative_to(FLASK_ROOT).as_posix()
+        return texture_path.relative_to(Path(FLASK_ROOT) / "src").as_posix()
 
 
 @app.route("/api/list_eggs", methods=["GET"])
@@ -127,6 +129,37 @@ def my_eggs() -> tuple[Response, int]:
         eggs = db.get_user_eggs(user_id)
 
     return jsonify([egg.model_dump(exclude={"egg_id"}) for egg in eggs]), 200
+
+# routes for created_eggs by USER by dima
+@app.route("/api/created_eggs", methods=["GET"])
+def created_eggs() -> tuple[Response, int]:
+
+    allowed, user_data = verify_discord_token(request.cookies.get("discord_token"))
+    if not allowed:
+        return jsonify({"error": "Invalid token"}), 401
+    user_id = user_data["id"]
+
+    with DB("db.db") as db:
+        eggs = db.get_created_eggs(user_id)
+
+    return jsonify([egg.model_dump() for egg in eggs]), 200
+
+# loads egg for EDIT
+@app.route("/api/egg/<egg_id>", methods=["GET"])
+def egg_detail(egg_id: str) -> tuple[Response, int]:
+
+    allowed, user_data = verify_discord_token(request.cookies.get("discord_token"))
+    if not allowed:
+        return jsonify({"error": "Invalid token"}), 401
+    user_id = user_data["id"]
+
+    with DB("db.db") as db:
+        egg = db.get_egg(egg_id)
+
+    if egg.author != user_id:
+        return jsonify({"error": "Forbidden"}), 403
+
+    return jsonify(egg.model_dump()), 200
 
 
 @app.route("/api/redeem_egg", methods=["POST"])
@@ -159,6 +192,7 @@ def create_egg() -> tuple[Response, int]:
     hint = data.get("hint")
     texture = data.get("texture")
     max_redeems = data.get("max_redeems", 1)
+    texture_size = data.get("textureSize", 0)
 
     texture_path = prepare_texture(texture)
 
@@ -172,6 +206,51 @@ def create_egg() -> tuple[Response, int]:
             author=user_id,
             texture=texture_path,
             max_redeems=max_redeems,
+            textureSize=texture_size,
+        )
+
+    return jsonify({"success": success, "egg_id": egg_id}), 200
+
+# route to update an egg with new information by dima
+@app.route("/api/update_egg/<egg_id>", methods=["PUT"])
+def update_egg(egg_id: str) -> tuple[Response, int]:
+
+    allowed, user_data = verify_discord_token(request.cookies.get("discord_token"))
+    if not allowed:
+        return jsonify({"error": "Invalid token"}), 401
+    user_id = user_data["id"]
+
+    data = request.json
+    if not data:
+        return jsonify({"error": "Missing JSON body"}), 400
+
+    name = data.get("name")
+    hint = data.get("hint")
+    max_redeems = data.get("max_redeems", 1)
+    texture_size = data.get("textureSize", 0)
+    texture = data.get("texture")
+
+    if not all([name, hint]):
+        return jsonify({"error": "name and hint are required"}), 400
+
+    with DB("db.db") as db:
+        egg = db.get_egg(egg_id)
+        if egg.author != user_id:
+            return jsonify({"error": "Forbidden"}), 403
+
+        if texture:
+            texture_path = prepare_texture(texture)
+        else:
+            texture_path = egg.texture
+
+        success = db.update_egg(
+            egg_id=egg_id,
+            name=name,
+            hint=hint,
+            author=user_id,
+            max_redeems=max_redeems,
+            texture=texture_path,
+            textureSize=texture_size,
         )
 
     return jsonify({"success": success, "egg_id": egg_id}), 200

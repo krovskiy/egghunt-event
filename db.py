@@ -24,6 +24,7 @@ class Egg(BaseModel):
     redeems: int
     created_at: str
     texture: str
+    textureSize: int
 
 
 class DB:
@@ -40,9 +41,10 @@ class DB:
                              redeems     INTEGER NOT NULL DEFAULT 0,
                              created_at  TEXT             DEFAULT CURRENT_TIMESTAMP,
                              redeemed_users TEXT DEFAULT '',
-                             texture     TEXT
-                             likes       TEXT
-                             dislikes    TEXT
+                             texture     TEXT,
+                             textureSize INTEGER NOT NULL DEFAULT 0,
+                             liked_users       TEXT,
+                             disliked_users    TEXT
                          );
                          """
 
@@ -95,9 +97,21 @@ class DB:
                             hint,
                             author,
                             max_redeems,
-                            texture)
-                           VALUES (?, ?, ?, ?, ?, ?);
+                            texture,
+                            textureSize)
+                           VALUES (?, ?, ?, ?, ?, ?, ?);
                            """
+    # new by dima - update egg with author and other stuff
+    __EGG_UPDATE_QUERY__ = """
+                                                    UPDATE eyren
+                                                    SET name = ?,
+                                                            hint = ?,
+                                                            max_redeems = ?,
+                                                            texture = ?,
+                                                            textureSize = ?
+                                                    WHERE id = ?
+                                                        AND author = ?;
+                                                    """
 
     __GET_EGGS_QUERY__ = """
                          SELECT id,
@@ -107,7 +121,8 @@ class DB:
                                 max_redeems,
                                 redeems,
                                 created_at,
-                                texture
+                                texture,
+                                textureSize
                          FROM eyren
                          WHERE id = (?);
                          """
@@ -144,10 +159,25 @@ class DB:
                                 max_redeems,
                                 redeems,
                                 created_at,
-                                texture
+                                texture,
+                                textureSize
                               FROM eyren
                               WHERE ',' || redeemed_users || ',' LIKE '%,' || (?) || ',%';
                               """
+    # new by dima update by texture size and other stuff
+    __GET_CREATED_EGGS_QUERY__ = """
+                                                                SELECT id,
+                                                                    name,
+                                                                    hint,
+                                                                    author,
+                                                                    max_redeems,
+                                                                    redeems,
+                                                                    created_at,
+                                                                    texture,
+                                                                    textureSize
+                                                                FROM eyren
+                                                                WHERE author = (?);
+                                                                """
 
     path: str | Path
     conn: sqlite.Connection
@@ -183,6 +213,7 @@ class DB:
         author: str,
         texture: str,
         max_redeems: int = 1,
+        textureSize: int = 0
     ) -> tuple[bool, str]:
         """Adds an egg to the database, returns whether egg was added and it's id"""
 
@@ -190,7 +221,7 @@ class DB:
         try:
             self.conn.execute(
                 self.__EGG_INSERT_QUERY__,
-                (egg_id, name, hint, author, max_redeems, texture),
+                (egg_id, name, hint, author, max_redeems, texture, textureSize),
             )
             self.conn.commit()
         except sqlite.IntegrityError:
@@ -214,7 +245,31 @@ class DB:
             redeems=ret[5],
             created_at=ret[6],
             texture=ret[7],
+            textureSize=ret[8]
         )
+
+    def update_egg(
+        self,
+        egg_id: str,
+        name: str,
+        hint: str,
+        author: str,
+        max_redeems: int,
+        texture: str,
+        textureSize: int,
+    ) -> bool:
+        """Updates an existing egg, returns whether it was updated"""
+        try:
+            before = self.conn.total_changes
+            self.conn.execute(
+                self.__EGG_UPDATE_QUERY__,
+                (name, hint, max_redeems, texture, textureSize, egg_id, author),
+            )
+            self.conn.commit()
+        except sqlite.OperationalError as e:
+            raise DBError(e) from e
+        else:
+            return self.conn.total_changes > before
 
     def dislike_egg(self, user_id: str, egg_id: str) -> None:
         try:
@@ -282,6 +337,31 @@ class DB:
                     redeems=egg_info[5],
                     created_at=egg_info[6],
                     texture=egg_info[7],
+                    textureSize=egg_info[8],
+                )
+                for egg_info in eggs
+            ]
+
+    def get_created_eggs(self, user_id: str) -> list[Egg]:
+        """Returns a list of all eggs created by a user"""
+        try:
+            eggs = self.conn.execute(
+                self.__GET_CREATED_EGGS_QUERY__, (user_id,)
+            ).fetchall()
+        except sqlite.OperationalError as e:
+            raise DBError(e) from e
+        else:
+            return [
+                Egg(
+                    egg_id=egg_info[0],
+                    name=egg_info[1],
+                    hint=egg_info[2],
+                    author=egg_info[3],
+                    max_redeems=egg_info[4],
+                    redeems=egg_info[5],
+                    created_at=egg_info[6],
+                    texture=egg_info[7],
+                    textureSize=egg_info[8],
                 )
                 for egg_info in eggs
             ]
@@ -290,4 +370,4 @@ class DB:
 if __name__ == "__main__":
     db = DB("db.db")
     with db as db:
-        db.add_egg("test", "test", "test", "test", -1)
+        db.add_egg("test", "test", "test", "test", -1, 0)
