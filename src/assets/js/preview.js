@@ -81,6 +81,13 @@ if (stageElement) {
   reloadPreview("");
 }
 
+const updateTextureStatus = (message, isError = false) => {
+  if (textureStatus) {
+    textureStatus.textContent = message;
+    textureStatus.style.color = isError ? '#c00' : '#060';
+  }
+};
+
 const applyEditEgg = (egg) => {
   const eggName = document.getElementById("eggName");
   const eggHint = document.getElementById("eggHint");
@@ -97,9 +104,13 @@ const applyEditEgg = (egg) => {
     textureRepeatInput.value = String(repeatNumber);
   }
 
+  
   if (egg.texture) {
-    currentTextureUrl = `/${egg.texture}`;
+    currentTextureUrl = egg.texture.startsWith('/') ? egg.texture : `/${egg.texture}`;
+    console.log('Loading texture from server:', currentTextureUrl);
     reloadPreview(currentTextureUrl);
+   
+    updateTextureStatus(`Loaded: ${egg.texture.split('/').pop()}`);
   }
 };
 
@@ -129,13 +140,46 @@ if (textureRepeatInput) {
 
 if (textureInput && textureStatus) {
   const fileLabel = textureInput.closest('.file-input');
+  const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8 MB
+  const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
-  const updateStatus = (file) => {
-    textureStatus.textContent = file ? `Selected: ${file.name}` : 'No image selected';
+  const validateFile = (file) => {
+    if (!file) return null;
+    
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      return 'Only image files (JPEG, PNG, WebP, GIF) are allowed.';
+    }
+    
+    if (file.size > MAX_FILE_SIZE) {
+      return `File size must be less than 8 MB. Current: ${(file.size / 1024 / 1024).toFixed(2)} MB`;
+    }
+    
+    return null;
+  };
+
+  const updateStatus = (file, error = null) => {
+    if (error) {
+      textureStatus.textContent = error;
+      textureStatus.style.color = '#c00';
+    } else if (file) {
+      textureStatus.textContent = `Selected: ${file.name}`;
+      textureStatus.style.color = '#060';
+    } else {
+      textureStatus.textContent = 'No image selected';
+      textureStatus.style.color = '#666';
+    }
   };
 
   textureInput.addEventListener('change', (event) => {
     const file = event.target.files && event.target.files[0];
+    const error = file ? validateFile(file) : null;
+
+    if (error) {
+      updateStatus(null, error);
+      textureInput.value = '';
+      return;
+    }
+
     updateStatus(file);
     if (file) {
       if (currentTextureUrl) URL.revokeObjectURL(currentTextureUrl);
@@ -158,7 +202,14 @@ if (textureInput && textureStatus) {
       event.preventDefault();
       fileLabel.classList.remove('dragover');
       const file = event.dataTransfer.files && event.dataTransfer.files[0];
+      
       if (file) {
+        const error = validateFile(file);
+        if (error) {
+          updateStatus(null, error);
+          return;
+        }
+        
         const dt = new DataTransfer();
         dt.items.add(file);
         textureInput.files = dt.files;
@@ -171,72 +222,127 @@ if (textureInput && textureStatus) {
   }
 }
 
-submit.addEventListener("click", async (e)=>{
-    e.preventDefault()
-    let eggName = document.getElementById("eggName")
-    let eggHint = document.getElementById("eggHint")
-    let eggMaxRedeems = document.getElementById("eggMaxRedeems")
-    const repeatValue = Number(textureRepeatInput?.value ?? 1);
+const compressImage = (inputFile) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxWidth = 1024;
+        const maxHeight = 1024;
+        let width = img.width;
+        let height = img.height;
 
-    let file = null;
-    if (textureInput && textureInput.files && textureInput.files.length > 0) {
-      file = textureInput.files[0];
+        if (width > height) {
+          if (width > maxWidth) {
+            height = (height * maxWidth) / width;
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = (width * maxHeight) / height;
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        canvas.toBlob((blob) => {
+          const compressedFile = new File([blob], inputFile.name, { type: 'image/jpeg' });
+          resolve(compressedFile);
+        }, 'image/jpeg', 0.85);
+      };
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(inputFile);
+  });
+};
+
+const toBase64 = (inputFile) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(inputFile);
+  });
+};
+
+submit.addEventListener("click", async (e)=>{
+  e.preventDefault();
+  
+  let eggName = document.getElementById("eggName");
+  let eggHint = document.getElementById("eggHint");
+  let eggMaxRedeems = document.getElementById("eggMaxRedeems");
+  const repeatValue = Number(textureRepeatInput?.value ?? 1);
+
+  let file = null;
+  if (textureInput && textureInput.files && textureInput.files.length > 0) {
+    file = textureInput.files[0];
+  }
+
+  try {
+    const isEdit = Boolean(editId);
+    
+    // For new eggs, texture is required. For edits, texture is optional.
+    if (!file && !isEdit) {
+      showFailureToast('Error: You must add a texture!');
+      return;
     }
 
-    const toBase64 = (inputFile) => {
-        return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(inputFile);
-        });
+    if (eggName.value === "" || eggHint.value === "" || eggMaxRedeems.value === "") {
+      showFailureToast('Error: One of the fields is empty!');
+      return;
+    }
+
+    let textureBase64 = null;
+    if (file) {
+      const compressedFile = await compressImage(file);
+      textureBase64 = await toBase64(compressedFile);
+    }
+
+    const url = isEdit ? `/api/update_egg/${editId}` : "/api/create_egg";
+    const method = isEdit ? "PUT" : "POST";
+
+    const payload = {
+      "user_id": "whatever", //THIS IS HARDCODED
+      "name": eggName.value,
+      "hint": eggHint.value,
+      "max_redeems": eggMaxRedeems.value,
+      "textureSize": repeatValue,
     };
 
-    try {
-      const textureBase64 = file ? await toBase64(file) : null;
-      if (!textureBase64){
-        showFailureToast('Error: You must add a texture!')
-        throw Error('Missing texture');
-      }
-
-      if (eggName.value == "" || eggHint.value == "" || eggMaxRedeems == ""){
-        showFailureToast('Error: One of the fields is empty!')
-        throw Error('No value in field');
-      }
-
-      const isEdit = Boolean(editId);
-      const url = isEdit ? `/api/update_egg/${editId}` : "/api/create_egg";
-      const method = isEdit ? "PUT" : "POST";
-
-      const payload = {
-        "user_id": "whatever", //THIS IS HARDCODED
-        "name": eggName.value,
-        "hint": eggHint.value,
-        "max_redeems": eggMaxRedeems.value,
-        "texture": textureBase64,
-        "textureSize": repeatValue,
-      };
-
-      const res = await fetch(url, {
-        method,
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify(payload),
-      });
-
-      const contentType = res.headers.get('content-type') || '';
-      const body = contentType.includes('application/json')
-        ? await res.json()
-        : await res.text();
-
-      if (!res.ok) {
-        console.error("Failed to fetch", body);
-        return;
-      }
-
-      console.log(body);
-      showSuccessToast(isEdit);
-    } catch(err) {
-      console.log("Failed to fetch", err)
+    if (textureBase64) {
+      payload.texture = textureBase64;
     }
-})
+
+    const res = await fetch(url, {
+      method,
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload),
+    });
+
+    const contentType = res.headers.get('content-type') || '';
+    const body = contentType.includes('application/json')
+      ? await res.json()
+      : await res.text();
+
+    if (!res.ok) {
+      console.error("Failed to fetch", body);
+      showFailureToast('Error: Failed to create egg. Please try again.');
+      return;
+    }
+
+    console.log(body);
+    showSuccessToast(isEdit);
+  } catch(err) {
+    console.error("Failed to process egg", err);
+    showFailureToast('Error: ' + (err.message || 'Failed to create egg'));
+  }
+});
 

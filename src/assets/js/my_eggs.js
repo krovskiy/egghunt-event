@@ -20,6 +20,9 @@ function buildGrid(data, gridID) {
 
     card.innerHTML = `
       <div class="egg-stage" id="egg-${egg.egg_id}">
+      <div class="egg-actions">
+          <button class="egg-action egg-qrcode" type="button">VIEW QR CODE</button>
+        </div>
       </div>
       <div class="egg-info">
         <div class="egg-name"><b>${egg.name}</b></div>
@@ -27,6 +30,77 @@ function buildGrid(data, gridID) {
     `; //somehow needs to fetch discord image instead of the placeholder 'creator-img'
 
     grid.appendChild(card);
+
+    card.querySelector('.egg-qrcode').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const overlay = document.createElement("div");
+      overlay.className = "overlay";
+
+      const box = document.createElement("div");
+      box.className = "overlay-box overlay-qrcode";
+
+      const qrcodeContainer = document.createElement("div");
+      qrcodeContainer.className = "qrcode-container";
+
+      const qrcodeDiv = document.createElement("div");
+      qrcodeDiv.id = "qrcode";
+      qrcodeDiv.className = "qrcode-display";
+
+      const linkSection = document.createElement("div");
+      linkSection.className = "qr-link-section";
+      linkSection.innerHTML = `
+        <div class="egg-label" style="text-align:center;">${egg.name}</div>
+        <div class="qr-link-url">http://localhost:5000/${egg.salted_hash}</div>
+        <div class="qr-link-buttons">
+          <button class="overlay-btn qr-copy-btn">COPY LINK</button>
+          <button class="overlay-btn qr-download-btn">DOWNLOAD QR</button>
+        </div>
+      `;
+
+      qrcodeContainer.appendChild(qrcodeDiv);
+      box.appendChild(qrcodeContainer);
+      box.appendChild(linkSection);
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+
+      new QRCode(qrcodeDiv, `http://localhost:5000/${egg.salted_hash}`)
+
+      const copyBtn = linkSection.querySelector('.qr-copy-btn');
+      copyBtn.addEventListener('click', async () => {
+        const url = `http://localhost:5000/${egg.salted_hash}`;
+        try {
+          await navigator.clipboard.writeText(url);
+          const originalText = copyBtn.textContent;
+          copyBtn.textContent = 'COPIED!';
+          setTimeout(() => {
+            copyBtn.textContent = originalText;
+          }, 2000);
+        } catch (err) {
+          console.error('Failed to copy:', err);
+          copyBtn.textContent = 'FAILED!';
+          setTimeout(() => {
+            copyBtn.textContent = 'COPY LINK';
+          }, 2000);
+        }
+      });
+      const downloadBtn = linkSection.querySelector('.qr-download-btn');
+      console.log(downloadBtn);
+
+      downloadBtn.addEventListener('click', () => {
+        const img = qrcodeDiv.querySelector('img');
+        if (!img) return;
+
+        const link = document.createElement('a');
+        link.href = img.src;
+        link.download = `egg-qr-${egg.egg_id}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      });
+
+      overlay.addEventListener("click", () => overlay.remove());
+      box.addEventListener("click", (e) => e.stopPropagation());
+    });
 
     const stageElement = card.querySelector(`.egg-stage`);
     loadEgg(stageElement, egg.texture, { modelPath: MODEL_PATH, repeatNumber: egg.textureSize }); // this needs CHANGED because right now it doesnt do anything
@@ -59,7 +133,7 @@ function showOverlay(id, data) {
     `
     : '';
 
-    eggInfo.innerHTML = `
+  eggInfo.innerHTML = `
     ${actionsHtml}
   <div class="egg-label">Easter Egg</div>
   <h2 class="egg-name"><b>${egg.name}</b></h2>
