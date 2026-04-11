@@ -19,9 +19,26 @@ async function voteEgg(endpoint, eggId) {
 }
 
 async function buildGrid() {
-  const eggs = await fetchEggs();
   const grid = document.getElementById('eggGrid');
   grid.innerHTML = '';
+
+  const showGridMessage = (message) => {
+    grid.innerHTML = `<h2>${message}</h2>`;
+    grid._eggs = [];
+  };
+
+  let eggs;
+  try {
+    eggs = await fetchEggs();
+  } catch (error) {
+    showGridMessage('Failed to fetch :(');
+    return;
+  }
+
+  if (!Array.isArray(eggs) || eggs.length === 0) {
+    showGridMessage('No eggs to be found... :(');
+    return;
+  }
 
   // Store eggs by their index so we can look them up on click, REPLACE WITH ANOTHER FIELD IN TABLE
   grid._eggs = eggs;
@@ -44,7 +61,7 @@ async function buildGrid() {
         </div>
       </div>
       <div class="egg-info">
-        <div class="egg-name">${egg.name}</div>
+        <div class="egg-name"><b>${egg.name}</b></div>
         <div class="egg-creator">
           Uploaded by: ${egg.author}
           <img class="creator-img" src="${avatarUrl}"/>
@@ -100,20 +117,20 @@ function showOverlay(id) {
 
   eggInfo.innerHTML = `
   <div class="egg-label">Easter Egg</div>
-  <h2 class="egg-name">${egg.name}</h2>
+  <h2 class="egg-name"><b>${egg.name}</b></h2>
   <div class="egg-fields">
     <div class="egg-row">
-      <span class="egg-key">Creator:</span>
+      <span class="egg-key"><b>Creator:</b></span>
       <span class="egg-value">@${egg.author}</span>
     </div>
     <div class="egg-row">
-      <span class="egg-key">Redeems:</span>
+      <span class="egg-key"><b>Redeems:</b></span>
       <span class="egg-redeem-badge">
         ${egg.max_redeems} left
       </span>
     </div>
     <div class="egg-row">
-      <span class="egg-key">Hint / Task:</span>
+      <span class="egg-key"><b>Hint / Task:</b></span>
       <span class="egg-hint">NOTHINGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</span>
     </div>
   </div>

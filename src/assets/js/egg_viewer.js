@@ -14,46 +14,47 @@ export function loadEgg(container, texturePath, options = {}) {
 
   const renderer = new WebGLRenderer({ alpha: true, antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.domElement.style.display = 'block';
+  renderer.domElement.style.width = '100%';
+  renderer.domElement.style.height = '100%';
   container.appendChild(renderer.domElement);
 
   let lastWidth = 0;
   let lastHeight = 0;
+  let resizeTimeout = null;
 
   const doResize = () => {
-    const rect = container.getBoundingClientRect();
-    let width = Math.floor(rect.width);
-    let height = Math.floor(rect.height);
+    let width = container.clientWidth;
+    let height = container.clientHeight;
 
     if (!width || !height) {
-      const fallback = container.parentElement?.getBoundingClientRect();
-      width = Math.floor(fallback?.width || container.clientWidth || 320);
-      height = Math.floor(fallback?.height || container.clientHeight || 320);
+      const rect = container.getBoundingClientRect();
+      width = Math.floor(rect.width);
+      height = Math.floor(rect.height);
     }
 
     if (width === lastWidth && height === lastHeight) return;
     lastWidth = width;
     lastHeight = height;
-    renderer.setSize(width, height, true);
+    renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
   };
 
   const resize = () => {
-    doResize();
+    if (resizeTimeout) clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(doResize, 150);
   };
 
   doResize();
-  requestAnimationFrame(doResize);
+  window.addEventListener('resize', resize);
 
   if (enableResize) {
-    window.addEventListener('resize', resize);
-    if (typeof ResizeObserver !== 'undefined') {
+    if (typeof ResizeObserver !== 'undefined' && !navigator.userAgent.match(/Mobile|Android|iPhone/i)) {
       const observer = new ResizeObserver(resize);
       observer.observe(container);
     }
   }
-
-  resize();
 
   scene.add(new AmbientLight(0xffffff, 1.2));
   const light = new DirectionalLight(0xffffff, 1.0);

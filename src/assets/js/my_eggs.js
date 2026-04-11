@@ -22,7 +22,7 @@ function buildGrid(data, gridID) {
       <div class="egg-stage" id="egg-${egg.egg_id}">
       </div>
       <div class="egg-info">
-        <div class="egg-name">${egg.name}</div>
+        <div class="egg-name"><b>${egg.name}</b></div>
         <div class="egg-creator">Uploaded by: ${egg.author} <img class="creator-img" src="${avatarUrl}"</div>
     `; //somehow needs to fetch discord image instead of the placeholder 'creator-img'
 
@@ -59,12 +59,26 @@ function showOverlay(id, data) {
     `
     : '';
 
-  eggInfo.innerHTML = `
-    <h2>${egg.name}</h2>
-    <p>Creator: ${egg.author}</p>
-    <p>Redeemable ONLY first who gets it: ${egg.max_redeems}</p>
-    <p>Hint: ${egg.hint}</p>
+    eggInfo.innerHTML = `
     ${actionsHtml}
+  <div class="egg-label">Easter Egg</div>
+  <h2 class="egg-name"><b>${egg.name}</b></h2>
+  <div class="egg-fields">
+    <div class="egg-row">
+      <span class="egg-key"><b>Creator:</b></span>
+      <span class="egg-value">@${egg.author}</span>
+    </div>
+    <div class="egg-row">
+      <span class="egg-key"><b>Redeems:</b></span>
+      <span class="egg-redeem-badge">
+        ${egg.max_redeems} left
+      </span>
+    </div>
+    <div class="egg-row">
+      <span class="egg-key"><b>Hint / Task:</b></span>
+      <span class="egg-hint">NOTHINGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</span>
+    </div>
+  </div>
   `;
 
   setTimeout(() => {

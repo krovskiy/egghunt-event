@@ -695,6 +695,13 @@ a {
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
 }
 
+@media (min-width: 761px) {
+  .overlay-box {
+    width: min(860px, 92vw);
+    height: min(420px, 75vh);
+  }
+}
+
 .overlay-preview {
   flex: 1;
   height: 100%;
@@ -1029,6 +1036,39 @@ a {
   box-shadow: 0 0px 12px var(--accent);
 }
 
+.toast {
+  position: fixed;
+  top: -80px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 999px;
+  background: #d8f5d3;
+  color: #2b6b2b;
+  font-weight: 600;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+  z-index: 10000;
+  transition: top 0.35s ease;
+}
+
+.toast.is-visible {
+  top: 20px;
+}
+
+.toast-icon {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.toast-failure {
+  background: #f8d7da;
+  color: #721c24;
+}
+
 @media (max-width: 900px) {
   .create-egg-layout {
     grid-template-columns: 1fr;
@@ -1117,7 +1157,7 @@ a {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  min-width: 160px;
+  min-width: 150px;
   background: white;
   border: 2px solid #ff91a9;
   border-radius: 12px;
