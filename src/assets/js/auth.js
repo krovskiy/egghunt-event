@@ -42,7 +42,11 @@ async function checkAuth() {
       `;
     } catch (e) {
       // token invalid, keep button
-    }
+    } finally {
+    // runs whether logged in, logged out, or errored
+    const authArea = document.getElementById('authArea');
+    if (authArea) authArea.classList.add('ready');
+  }
   }
 
 function logout() {
