@@ -62,10 +62,10 @@ async function buildGrid() {
     const card = document.createElement('div');
     card.className = 'egg-container';
 
-    const ext = egg.user_avatar?.startsWith("a_") ? "gif" : "png";
+    const ext = egg.author_avatar?.startsWith("a_") ? "gif" : "png";
 
-    const avatarUrl = egg.user_avatar
-      ? `https://cdn.discordapp.com/avatars/${egg.user_id}/${egg.user_avatar}.${ext}`
+    const avatarUrl = egg.author_avatar
+      ? `https://cdn.discordapp.com/avatars/${egg.author_id}/${egg.author_avatar}.${ext}`
       : "https://cdn.discordapp.com/embed/avatars/0.png";
 
     card.innerHTML = `

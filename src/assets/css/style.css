@@ -537,10 +537,9 @@ a {
 }
 
 .creator-img {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
     object-fit: contain;
-    margin-bottom: 2px;
 }
 
 #backdrop {

@@ -241,7 +241,7 @@ def egg_detail(egg_id: str) -> tuple[Response, int]:
     with DB("db.db") as db:
         egg = db.get_egg(egg_id)
 
-    if egg.author != user_id:
+    if egg.author_id != user_id:
         return jsonify({"error": "Forbidden"}), 403
 
     return jsonify(egg.model_dump()), 200
@@ -286,18 +286,19 @@ def create_egg() -> tuple[Response, int]:
     if not data:
         return jsonify({"error": "Missing JSON body"}), 400
 
-    user_id = data.get("user_id")
     name = data.get("name")
     hint = data.get("hint")
     texture = data.get("texture")
     max_redeems = data.get("max_redeems", 1)
     texture_size = data.get("textureSize", 0)
  
-    # FIX: author comes from the verified token, not the request body
+    # FIX: extract author info from verified Discord token
     user_id = user_data["id"]
+    author_name = user_data.get("username", "Unknown")
+    author_avatar = user_data.get("avatar", "")
 
     if not all([user_id, name, hint, texture]):
-        return jsonify({"error": "user_id, name, hint and texture are required"}), 400
+        return jsonify({"error": "name, hint and texture are required"}), 400
 
     # FIX: file written before the check above ^
     try:
@@ -309,7 +310,9 @@ def create_egg() -> tuple[Response, int]:
         success, egg_id = db.add_egg(
             name=name,
             hint=hint,
-            author=user_id,
+            author_id=user_id,
+            author=author_name,
+            author_avatar=author_avatar,
             texture=texture_path,
             max_redeems=max_redeems,
             textureSize=texture_size,
@@ -341,23 +344,27 @@ def update_egg(egg_id: str) -> tuple[Response, int]:
 
     with DB("db.db") as db:
         egg = db.get_egg(egg_id)
-        if egg.author != user_id:
+        if egg.author_id != user_id:
             return jsonify({"error": "Forbidden"}), 403
 
-        # FIX: resolve fetching egg
+        # FIX: resolve texture path if provided
+        texture_path = texture if texture else egg.texture
         if texture:
             try:
                 texture_path = prepare_texture(texture)
             except TextureError as e:
                 return jsonify({"error": str(e)}), 400
-            else:
-                texture_path = None
+
+        author_name = user_data.get("username", egg.author)
+        author_avatar = user_data.get("avatar", egg.author_avatar)
 
         success = db.update_egg(
             egg_id=egg_id,
             name=name,
             hint=hint,
-            author=user_id,
+            author_id=user_id,
+            author=author_name,
+            author_avatar=author_avatar,
             max_redeems=max_redeems,
             texture=texture_path,
             textureSize=texture_size,
@@ -375,7 +382,7 @@ def delete_egg(egg_id: str) -> tuple[Response, int]:
  
     with DB("db.db") as db:
         egg = db.get_egg(egg_id)
-        if egg.author != user_id:
+        if egg.author_id != user_id:
             return jsonify({"error": "Forbidden"}), 403
         db.delete_egg(egg_id)
  

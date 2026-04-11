@@ -310,7 +310,6 @@ submit.addEventListener("click", async (e)=>{
     const method = isEdit ? "PUT" : "POST";
 
     const payload = {
-      "user_id": "whatever", //THIS IS HARDCODED
       "name": eggName.value,
       "hint": eggHint.value,
       "max_redeems": eggMaxRedeems.value,

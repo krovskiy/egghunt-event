@@ -12,10 +12,10 @@ function buildGrid(data, gridID) {
     const card = document.createElement('div');
     card.className = 'egg-container';
 
-    const ext = egg.user_avatar?.startsWith("a_") ? "gif" : "png";
+    const ext = egg.author_avatar?.startsWith("a_") ? "gif" : "png";
 
-    const avatarUrl = egg.user_avatar
-      ? `https://cdn.discordapp.com/avatars/${egg.user_id}/${egg.user_avatar}.${ext}`
+    const avatarUrl = egg.author_avatar
+      ? `https://cdn.discordapp.com/avatars/${egg.author_id}/${egg.author_avatar}.${ext}`
       : "https://cdn.discordapp.com/embed/avatars/0.png";
 
     card.innerHTML = `
@@ -139,7 +139,8 @@ function showOverlay(id, data) {
 
   const egg = data.find(e => `egg-${e.egg_id}` === id);
 
-  const isAuthor = currentUserId && egg.author === currentUserId;
+  const isAuthor = currentUserId && egg.author_id === currentUserId;
+  
   const actionsHtml = isAuthor
     ? `
       <div class="overlay-actions">
@@ -150,7 +151,7 @@ function showOverlay(id, data) {
     : '';
 
   eggInfo.innerHTML = `
-    ${actionsHtml}
+  ${actionsHtml}
   <div class="egg-label">Easter Egg</div>
   <h2 class="egg-name"><b>${egg.name}</b></h2>
   <div class="egg-fields">
