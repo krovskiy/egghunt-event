@@ -43,6 +43,21 @@ async function buildGrid() {
   // Store eggs by their index so we can look them up on click, REPLACE WITH ANOTHER FIELD IN TABLE
   grid._eggs = eggs;
 
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        const card = entry.target;
+        const stageElement = card.querySelector('.egg-stage');
+        if (!stageElement.querySelector('canvas')) {
+          const index = parseInt(stageElement.id.replace('egg-', ''), 10);
+          const egg = grid._eggs[index];
+          loadEgg(stageElement, egg.texture, { modelPath: MODEL_PATH, repeatNumber: egg.textureSize });
+        }
+        observer.unobserve(card);
+      }
+    });
+  }, { rootMargin: '100px' });
+
   eggs.forEach((egg, index) => {
     const card = document.createElement('div');
     card.className = 'egg-container';
@@ -70,9 +85,7 @@ async function buildGrid() {
     `;
 
     grid.appendChild(card);
-
-    const stageElement = card.querySelector('.egg-stage');
-    loadEgg(stageElement, egg.texture, { modelPath: MODEL_PATH, repeatNumber: egg.textureSize });
+    observer.observe(card);
 
     card.querySelector('.egg-like').addEventListener('click', (e) => {
       e.stopPropagation();
