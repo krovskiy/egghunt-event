@@ -46,7 +46,7 @@ const showSuccessToast = (isEdit = false) => {
     toast.classList.remove('is-visible');
     setTimeout(() => {
       toast.remove();
-      window.location.reload();
+      window.location.href = '/create-egg';
     }, 400);
   }, 2400);
 };
