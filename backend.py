@@ -186,22 +186,11 @@ def delete_egg(egg_id: str) -> tuple[Response, int]:
 
 @app.route("/api/like_egg", methods=["POST"])
 def like_egg() -> tuple[Response, int]:
-
-    # get token and if it's valid -> user can like
-    token = request.cookies.get("discord_token")
-    if not token:
-        return jsonify({"error": "No token"}), 401
-
-    allowed, user_data = verify_discord_token(token)
-    if not allowed:
-        return jsonify({"error": "Invalid token"}), 401
-
-    data = request.json or {}
+    data = request.json
+    user_id = data.get("user_id")
     egg_id = data.get("egg_id")
-    if not egg_id:
-        return jsonify({"error": "egg_id is required"}), 400
-
-    user_id = user_data["id"]
+    if not all([user_id, egg_id]):
+        return jsonify({"error": "user_id and egg_id are required"}), 400
 
     with DB("db.db") as db:
         db.like_egg(user_id, egg_id)
@@ -210,22 +199,11 @@ def like_egg() -> tuple[Response, int]:
 
 @app.route("/api/dislike_egg", methods=["POST"])
 def dislike_egg() -> tuple[Response, int]:
-    
-    # get token and if it's valid -> user can dislike
-    token = request.cookies.get("discord_token")
-    if not token:
-        return jsonify({"error": "No token"}), 401
-
-    allowed, user_data = verify_discord_token(token)
-    if not allowed:
-        return jsonify({"error": "Invalid token"}), 401
-
-    data = request.json or {}
+    data = request.json
+    user_id = data.get("user_id")
     egg_id = data.get("egg_id")
-    if not egg_id:
-        return jsonify({"error": "egg_id is required"}), 400
-
-    user_id = user_data["id"]
+    if not all([user_id, egg_id]):
+        return jsonify({"error": "user_id and egg_id are required"}), 400
 
     with DB("db.db") as db:
         db.dislike_egg(user_id, egg_id)
