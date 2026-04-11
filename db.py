@@ -19,7 +19,9 @@ class Egg(BaseModel):
     egg_id: str
     name: str
     hint: str
+    author_id: str
     author: str
+    author_avatar: str
     max_redeems: int
     redeems: int
     created_at: str
@@ -36,7 +38,9 @@ class DB:
                              id          TEXT PRIMARY KEY,
                              name        TEXT    NOT NULL,
                              hint        TEXT    NOT NULL,
+                             author_id   TEXT    NOT NULL,
                              author      TEXT    NOT NULL,
+                             author_avatar    TEXT    NOT NULL DEFAULT '',
                              max_redeems INTEGER NOT NULL DEFAULT 1,
                              redeems     INTEGER NOT NULL DEFAULT 0,
                              created_at  TEXT             DEFAULT CURRENT_TIMESTAMP,
@@ -95,29 +99,35 @@ class DB:
                            (id,
                             name,
                             hint,
+                            author_id,
                             author,
+                            author_avatar,
                             max_redeems,
                             texture,
                             textureSize)
-                           VALUES (?, ?, ?, ?, ?, ?, ?);
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
                            """
     # new by dima - update egg with author and other stuff
     __EGG_UPDATE_QUERY__ = """
                                                     UPDATE eyren
                                                     SET name = ?,
                                                             hint = ?,
+                                                            author = ?,
+                                                            author_avatar = ?,
                                                             max_redeems = ?,
                                                             texture = ?,
                                                             textureSize = ?
                                                     WHERE id = ?
-                                                        AND author = ?;
+                                                        AND author_id = ?;
                                                     """
 
     __GET_EGGS_QUERY__ = """
                          SELECT id,
                                 name,
                                 hint,
+                                author_id,
                                 author,
+                                author_avatar,
                                 max_redeems,
                                 redeems,
                                 created_at,
@@ -137,7 +147,7 @@ class DB:
                                        ELSE redeemed_users || ',' || :user_id
                                        END
                            WHERE id = :id
-                             AND author != :user_id
+                             AND author_id != :user_id
                              AND redeems < max_redeems
                              AND (
                                redeemed_users IS NULL
@@ -155,7 +165,9 @@ class DB:
                               SELECT id,
                                 name,
                                 hint,
+                                author_id,
                                 author,
+                                author_avatar,
                                 max_redeems,
                                 redeems,
                                 created_at,
@@ -166,18 +178,20 @@ class DB:
                               """
     # new by dima update by texture size and other stuff
     __GET_CREATED_EGGS_QUERY__ = """
-                                                                SELECT id,
-                                                                    name,
-                                                                    hint,
-                                                                    author,
-                                                                    max_redeems,
-                                                                    redeems,
-                                                                    created_at,
-                                                                    texture,
-                                                                    textureSize
-                                                                FROM eyren
-                                                                WHERE author = (?);
-                                                                """
+                                SELECT id,
+                                    name,
+                                    hint,
+                                    author_id,
+                                    author,
+                                    author_avatar,
+                                    max_redeems,
+                                    redeems,
+                                    created_at,
+                                    texture,
+                                    textureSize
+                                FROM eyren
+                                WHERE author_id = (?);
+                                """
 
     path: str | Path
     conn: sqlite.Connection
@@ -186,8 +200,21 @@ class DB:
         self.path = db_name
         self.conn = sqlite.connect(db_name)
         self.conn.execute(self.__INIT_SQL_QUERY__)
+        self._migrate(self.conn)
         self.conn.commit()
         self.conn.close()
+
+    # i have no idea, some ai slop
+    def _migrate(self, conn: sqlite.Connection) -> None:
+        """Add new columns to existing databases that predate this schema."""
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(eyren)")}
+        migrations = [
+            ("author_id",     "ALTER TABLE eyren ADD COLUMN author_id     TEXT NOT NULL DEFAULT ''"),
+            ("author_avatar", "ALTER TABLE eyren ADD COLUMN author_avatar TEXT NOT NULL DEFAULT ''"),
+        ]
+        for col, sql in migrations:
+            if col not in existing:
+                conn.execute(sql)
 
     def __enter__(self, commit_after: bool = True) -> typing.Self:
         try:
@@ -206,28 +233,42 @@ class DB:
                 raise DBError(e) from e
         self.conn.close()
 
+    def _row_to_egg(self, row: tuple) -> "Egg":
+        return Egg(
+            egg_id=row[0],
+            name=row[1],
+            hint=row[2],
+            author_id=row[3],
+            author=row[4],
+            author_avatar=row[5],
+            max_redeems=row[6],
+            redeems=row[7],
+            created_at=row[8],
+            texture=row[9],
+            textureSize=row[10],
+        )
+    
     def add_egg(
         self,
         name: str,
         hint: str,
+        author_id: str,
         author: str,
+        author_avatar: str,
         texture: str,
         max_redeems: int = 1,
-        textureSize: int = 0
+        textureSize: int = 0,
     ) -> tuple[bool, str]:
-        """Adds an egg to the database, returns whether egg was added and it's id"""
-
-        egg_id = sha256(name.encode() + author.encode() + SALT.encode()).hexdigest()
+        """Adds an egg to the database, returns whether egg was added and its id"""
+        egg_id = sha256(name.encode() + author_id.encode() + SALT.encode()).hexdigest()
         try:
             self.conn.execute(
                 self.__EGG_INSERT_QUERY__,
-                (egg_id, name, hint, author, max_redeems, texture, textureSize),
+                (egg_id, name, hint, author_id, author, author_avatar, max_redeems, texture, textureSize),
             )
             self.conn.commit()
         except sqlite.IntegrityError:
             return False, egg_id
-        else:
-            pass
         return True, egg_id
 
     def get_egg(self, egg_id: str) -> Egg:
@@ -235,25 +276,16 @@ class DB:
             ret = self.conn.execute(self.__GET_EGGS_QUERY__, (egg_id,)).fetchone()
         except sqlite.OperationalError as e:
             raise DBError(e) from e
-
-        return Egg(
-            egg_id=ret[0],
-            name=ret[1],
-            hint=ret[2],
-            author=ret[3],
-            max_redeems=ret[4],
-            redeems=ret[5],
-            created_at=ret[6],
-            texture=ret[7],
-            textureSize=ret[8]
-        )
+        return self._row_to_egg(ret)
 
     def update_egg(
         self,
         egg_id: str,
         name: str,
         hint: str,
+        author_id: str,
         author: str,
+        author_avatar: str,
         max_redeems: int,
         texture: str,
         textureSize: int,
@@ -263,14 +295,12 @@ class DB:
             before = self.conn.total_changes
             self.conn.execute(
                 self.__EGG_UPDATE_QUERY__,
-                (name, hint, max_redeems, texture, textureSize, egg_id, author),
+                (name, hint, author, author_avatar, max_redeems, texture, textureSize, egg_id, author_id),
             )
             self.conn.commit()
         except sqlite.OperationalError as e:
             raise DBError(e) from e
-        else:
-            return self.conn.total_changes > before
-
+        return self.conn.total_changes > before
     def dislike_egg(self, user_id: str, egg_id: str) -> None:
         try:
             self.conn.execute(
@@ -312,62 +342,33 @@ class DB:
         """Returns a list of all eggs in the database"""
         try:
             return [
-                self.get_egg(egg_id)
-                for (egg_id,) in self.conn.execute("SELECT id FROM eyren")
+                self._row_to_egg(row)
+                for row in self.conn.execute(
+                    "SELECT id, name, hint, author_id, author, author_avatar, "
+                    "max_redeems, redeems, created_at, texture, textureSize FROM eyren"
+                )
             ]
         except sqlite.OperationalError as e:
             raise DBError(e) from e
 
     def get_user_eggs(self, user_id: str) -> list[Egg]:
-        """Returns a list of all eggs in the database"""
+        """Returns all eggs redeemed by a user"""
         try:
-            eggs = self.conn.execute(
-                self.__GET_USER_EGGS_QUERY__, (user_id,)
-            ).fetchall()
+            rows = self.conn.execute(self.__GET_USER_EGGS_QUERY__, (user_id,)).fetchall()
         except sqlite.OperationalError as e:
             raise DBError(e) from e
-        else:
-            return [
-                Egg(
-                    egg_id=egg_info[0],
-                    name=egg_info[1],
-                    hint=egg_info[2],
-                    author=egg_info[3],
-                    max_redeems=egg_info[4],
-                    redeems=egg_info[5],
-                    created_at=egg_info[6],
-                    texture=egg_info[7],
-                    textureSize=egg_info[8],
-                )
-                for egg_info in eggs
-            ]
-
+        return [self._row_to_egg(row) for row in rows]
+ 
     def get_created_eggs(self, user_id: str) -> list[Egg]:
-        """Returns a list of all eggs created by a user"""
+        """Returns all eggs created by a user"""
         try:
-            eggs = self.conn.execute(
-                self.__GET_CREATED_EGGS_QUERY__, (user_id,)
-            ).fetchall()
+            rows = self.conn.execute(self.__GET_CREATED_EGGS_QUERY__, (user_id,)).fetchall()
         except sqlite.OperationalError as e:
             raise DBError(e) from e
-        else:
-            return [
-                Egg(
-                    egg_id=egg_info[0],
-                    name=egg_info[1],
-                    hint=egg_info[2],
-                    author=egg_info[3],
-                    max_redeems=egg_info[4],
-                    redeems=egg_info[5],
-                    created_at=egg_info[6],
-                    texture=egg_info[7],
-                    textureSize=egg_info[8],
-                )
-                for egg_info in eggs
-            ]
-
+        return [self._row_to_egg(row) for row in rows]
 
 if __name__ == "__main__":
     db = DB("db.db")
     with db as db:
-        db.add_egg("test", "test", "test", "test", -1, 0)
+        db.add_egg("test", "test", "000000000000000000", "testuser", "", "test", -1, 0)
+
