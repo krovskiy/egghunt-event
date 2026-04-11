@@ -103,7 +103,23 @@ function buildGrid(data, gridID) {
     });
 
     const stageElement = card.querySelector(`.egg-stage`);
-    loadEgg(stageElement, egg.texture, { modelPath: MODEL_PATH, repeatNumber: egg.textureSize }); // this needs CHANGED because right now it doesnt do anything
+    
+    // Lazy load 3D model when card becomes visible
+    if ('IntersectionObserver' in window) {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            if (!stageElement.querySelector('canvas')) {
+              loadEgg(stageElement, egg.texture, { modelPath: MODEL_PATH, repeatNumber: egg.textureSize });
+            }
+            observer.unobserve(card);
+          }
+        });
+      }, { rootMargin: '100px' });
+      observer.observe(card);
+    } else {
+      loadEgg(stageElement, egg.texture, { modelPath: MODEL_PATH, repeatNumber: egg.textureSize });
+    }
   });
 }
 
