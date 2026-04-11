@@ -8,10 +8,6 @@
     font-display: swap; 
 }
 
-@font-face {
-  font-family: 'mochi';
-  src: url('../fonts/Mochi\ Boom\ DEMO.ttf');
-}
 
 @media (max-width: 900px) {
   .options {
@@ -74,6 +70,8 @@ a {
 }
 
 .header {
+  overflow: visible;
+
   display: flex;
   align-items: center;
   justify-content: space-around;
@@ -217,12 +215,31 @@ a {
     transition: all 0.2s ease;
 }
 
+.options .auth-only {
+  display: none;
+}
+
+.options .auth-only.is-auth {
+  display: block;
+}
+
 .options > * > a {
   display: block;
   padding: 12px 15px;
   color: inherit;
   width: 100%;
   height: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  fill: #4a4a4a;
+  mask-size: cover;
 }
 
 .options > *:hover {
@@ -298,6 +315,21 @@ a {
   font-family: 'profont';
 }
 
+.sponsor-tagline {
+  color: #C9056F;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sponsor-logo {
+  height: 24px;
+  object-fit: contain;
+  object-position: center;
+  display: inline-block;
+}
+
 .mark-brown {
     color: transparent;
     font-family: 'profont';
@@ -333,7 +365,10 @@ a {
 .egg-container {
   overflow: hidden;
   cursor: pointer;
-  border: solid;
+  border-top: 2px var(--pink-main) solid;
+  border-bottom: 2px var(--pink-main) solid;
+  border-radius: 8px;
+  background-color: rgba(255, 255, 255, 0.495);
 }
 
 .egg-stage {
@@ -377,6 +412,47 @@ a {
   color: #fff;
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2);
   transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.overlay-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  padding: 12px;
+  gap: 10px;
+}
+
+
+.overlay-btn {
+  gap: 8px;
+  width: 100%;
+  padding: 12px 16px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+  border: var(--pink-dark);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: transform 0.4s ease;
+}
+
+.overlay-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.04);
+}
+
+.overlay-btn:active {
+  background: var(--pink-dark);
+}
+
+.overlay-edit {
+  background-color: var(--pink-light);
+}
+
+.overlay-delete {
+  background-color: var(--pink-light);
+  color: red;
 }
 
 .egg-action:hover {
@@ -460,13 +536,13 @@ a {
     width: 12px;
     height: 12px;
     object-fit: contain;
-    margin-top: 2px;
+    margin-bottom: 2px;
 }
 
 #backdrop {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -635,13 +711,52 @@ a {
   background: rgba(255, 145, 169, 0.5);
 }
 
-.overlay-info {
-  flex: 1;
-  padding: 20px 22px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 6px;
+/* ai slop idk loool */
+.overlay-info { flex: 1; padding: 24px 26px; display: flex; flex-direction: column; justify-content: flex-start; gap: 14px; min-width: 0; overflow-y: auto; }
+.egg-label { font-size: 11px; font-weight: 500; color:  var(--text); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 2px; }
+.egg-name { margin: 0 0 4px; font-size: 36px; font-weight: 500; overflow-wrap: anywhere; }
+.egg-fields { display: flex; flex-direction: column; gap: 8px; }
+.egg-row { display: flex; align-items: flex-start; flex-direction: column; gap: 10px; }
+.egg-key { font-size: 17px; color:  var(--text); min-width: 56px; padding-top: 2px; }
+.egg-value { font-size: 18px; font-weight: 500; overflow-wrap: anywhere; }
+.egg-hint { font-size: 18px; color: var(--text); margin-top: 2px; overflow-wrap: anywhere; }
+
+.egg-redeem-badge { display: inline-flex; align-items: center; border-radius: 999px; font-size: 17px; font-weight: 500; }
+.egg-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.redeem-green  { background: #EAF3DE; color: #3B6D11; } .redeem-green  .egg-dot { background: #639922; }
+.redeem-yellow { background: #FAEEDA; color: #854F0B; } .redeem-yellow .egg-dot { background: #EF9F27; }
+.redeem-red    { background: #FCEBEB; color: #A32D2D; } .redeem-red    .egg-dot { background: #E24B4A; }
+
+@media (max-width: 760px) {
+  .overlay-box {
+    flex-direction: column;
+    height: auto;
+    max-height: 92vh;
+  }
+
+  .overlay-preview {
+    min-height: 240px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .overlay-preview::after {
+    top: auto;
+    left: 20px;
+    right: 20px;
+    bottom: 0;
+    width: auto;
+    height: 2px;
+  }
+
+  .overlay-info {
+    padding: 18px 20px 22px;
+    align-items: flex-start;
+  }
+
+  .egg-name {
+    font-size: 28px;
+  }
 }
 
 .create-egg-layout, .rules-container {
@@ -661,7 +776,7 @@ a {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-height: 300px;
+  min-height: 700px;
 }
 
 .create-egg-canvas {
@@ -691,7 +806,7 @@ a {
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
   display: grid;
   gap: 10px;
-  min-height: 670px;
+  min-height: 700px;
 }
 
 .rules-info, .rules-creator {
@@ -704,6 +819,62 @@ a {
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
   display: grid;
   gap: 30px;
+}
+
+.rules-info {
+  text-align: left;
+}
+
+.rules-header h1 {
+  font-family: 'profont', 'Nunito', sans-serif;
+  font-size: 2rem;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.rules-lede {
+  font-size: 15px;
+  color: #6a5b63;
+  max-width: 520px;
+}
+
+.rules-section {
+  padding: 14px 16px;
+  background: #fff;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 145, 169, 0.15);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.06);
+}
+
+.rules-section h2 {
+  font-size: 1.1rem;
+  margin-bottom: 10px;
+  color: #5a4b52;
+}
+
+.rules-list,
+.rules-steps {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  color: #5e565a;
+  font-size: 14px;
+}
+
+.rules-list li,
+.rules-steps li {
+  line-height: 1.6;
+}
+
+.rules-note {
+  font-size: 13px;
+  color: #7a6b72;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff3f7;
+  border: 1px dashed rgba(255, 145, 169, 0.5);
+  width: fit-content;
 }
 
 .rules-creator img {
@@ -728,6 +899,45 @@ a {
   font-size: 14px;
   box-shadow: 0 0 0 rgba(0, 0, 0, 0);
   transition: background-color 0.2s ease, border-color 0.2s ease, border-width 0.2s ease, padding 0.2s ease, box-shadow 0.2s ease, font-size 0.2s ease;
+}
+
+.create-egg-form input[type="range"] {
+  width: 100%;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.create-egg-form input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  background: #ffd1dc;
+  border-radius: 999px;
+}
+
+.create-egg-form input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: #ff69b4;
+  border: 2px solid #ff91a9;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.create-egg-form input[type="range"]::-moz-range-track {
+  height: 8px;
+  background: #ffd1dc;
+  border-radius: 999px;
+}
+
+.create-egg-form input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ff69b4;
+  border: 2px solid #ff91a9;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 .file-input {
@@ -804,14 +1014,19 @@ a {
     font-weight: 600;
     font-size: 15px;
     letter-spacing: 0.3px;
-      white-space: nowrap;
+    white-space: nowrap;
     transition: all 0.2s ease;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .create-egg-form input[type="submit"]:hover {
-
   box-shadow: 0 0px 12px rgba(255, 105, 180, 0.4);
+}
+
+.create-egg-form input[type="submit"]:active {
+  background-color: var(--accent);
+  border: 5px solid #84844d;
+  box-shadow: 0 0px 12px var(--accent);
 }
 
 @media (max-width: 900px) {
@@ -835,9 +1050,123 @@ a {
     order: 4;
   }
 
-  .options > .discord-btn {
+  .options > #authArea {
     order: 5;
   }
 }
 
 /* options stuff */
+
+#authArea {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  position: relative;
+  z-index: 1000;
+}
+
+#authArea::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 100%;
+  height: 12px; /* covers the gap */
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  padding: 10px 18px;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+}
+
+.user-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid #ff91a9;
+  object-fit: cover;
+}
+
+.user-names {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.user-global {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.user-username {
+  font-size: 13px;
+  opacity: 0.6;
+  font-weight: 500;
+}
+
+.user-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 160px;
+  background: white;
+  border: 2px solid #ff91a9;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 999;
+}
+
+#authArea:hover .user-dropdown {
+  opacity: 1;
+  pointer-events: all;
+  z-index: 1001;
+}
+
+.user-dropdown a,
+.user-dropdown button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s ease, padding-left 0.15s ease;
+  text-decoration: none;
+}
+
+.user-dropdown a:hover,
+.user-dropdown button:hover {
+  background: var(--pink-light);
+}
+
+.user-dropdown-divider {
+  height: 1px;
+  background: #ffd1dc;
+  margin: 4px 0;
+}
+
+
+.logout-btn {
+  display: flex;
+  align-items: center;
+  color: #e00550 !important;
+}

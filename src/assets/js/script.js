@@ -1,141 +1,43 @@
-import { Scene, PerspectiveCamera, WebGLRenderer, AmbientLight, DirectionalLight, TextureLoader, RepeatWrapping, Box3, Vector3, Group } from 'https://cdn.jsdelivr.net/npm/three@0.182.0/+esm';
-import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/loaders/GLTFLoader.js/+esm';
-import { MeshoptDecoder } from 'https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/libs/meshopt_decoder.module.js/+esm';
-
-const EGGS = [
-  { id: 1, name: 'Egg', creator: "loser", texture: './assets/textures/egg1.png', hash: "u91dhidusfh9a8df" },
-  { id: 2, name: 'Egg', creator: "loser",  texture: './assets/textures/egg2.png', hash: "u91dhidusfh9a8df" },
-  { id: 3, name: 'Egg', creator: "loser",  texture: './assets/textures/egg3.png', hash: "u91dhidusfh9a8df" },
-  { id: 4, name: 'Egg', creator: "loser",  texture: './assets/textures/egg4.png', hash: "u91dhidusfh9a8df" },
-  { id: 5, name: 'Egg', creator: "loser",  texture: './assets/textures/egg5.png', hash: "u91dhidusfh9a8df" },
-  { id: 6, name: 'Egg', creator: "loser", texture: './assets/textures/egg6.png', hash: "u91dhidusfh9a8df" },
-];
+import { loadEgg } from './egg_viewer.js';
 
 const MODEL_PATH = './assets/models/egg.glb';
 
-function loadEgg(container, texturePath) {
-  const scene = new Scene();
-  const camera = new PerspectiveCamera(55, container.clientWidth / container.clientHeight, 0.1, 100);
-  camera.position.set(0, 0, 6);
-
-  const renderer = new WebGLRenderer({ alpha: true, antialias: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  renderer.setSize(container.clientWidth, container.clientHeight);
-  container.appendChild(renderer.domElement);
-
-  scene.add(new AmbientLight(0xffffff, 1.2));
-  const light = new DirectionalLight(0xffffff, 1.0);
-  light.position.set(2, 3, 4);
-  scene.add(light);
-
-  let model = null;
-  let pivot = null;
-  let rotationY = 0;
-  let isDragging = false;
-  let didDrag = false;
-  let lastX = 0;
-  let dragStartX = 0;
-  let lastDragTime = 0;
-  const autoRotateDelayMs = 900;
-  const autoRotateSpeed = 0.003;
-
-  const loader = new GLTFLoader();
-  loader.setMeshoptDecoder(MeshoptDecoder);
-  loader.load(MODEL_PATH, (gltf) => {
-    model = gltf.scene;
-    model.scale.setScalar(4);
-    
-    // Center the model by calculating bounding box and offsetting position
-    const box = new Box3().setFromObject(model);
-    const center = new Vector3();
-    box.getCenter(center);
-    model.position.sub(center);
-    
-    const textureLoader = new TextureLoader();
-    textureLoader.load(texturePath, (texture) => {
-      texture.repeat.set(2, 3);
-      texture.wrapS = RepeatWrapping;
-      texture.wrapT = RepeatWrapping;
-      
-      model.traverse((child) => {
-        if (child.isMesh) {
-          child.material.map = texture;
-          child.material.needsUpdate = true;
-        }
-      });
-    });
-    
-    pivot = new Group();
-    pivot.add(model);
-    scene.add(pivot);
-  });
-
-  renderer.domElement.style.cursor = 'grab';
-  renderer.domElement.addEventListener('pointerdown', (event) => {
-    isDragging = true;
-    didDrag = false;
-    lastX = event.clientX;
-    dragStartX = event.clientX;
-    lastDragTime = performance.now();
-    renderer.domElement.setPointerCapture(event.pointerId);
-    renderer.domElement.style.cursor = 'grabbing';
-  });
-
-  renderer.domElement.addEventListener('pointermove', (event) => {
-    if (!isDragging || !model) return;
-    const deltaX = event.clientX - lastX;
-    lastX = event.clientX;
-    rotationY += deltaX * 0.01;
-    if (Math.abs(event.clientX - dragStartX) > 4) {
-      didDrag = true;
-    }
-    lastDragTime = performance.now();
-  });
-
-  renderer.domElement.addEventListener('pointerup', (event) => {
-    isDragging = false;
-    lastDragTime = performance.now();
-    renderer.domElement.releasePointerCapture(event.pointerId);
-    renderer.domElement.style.cursor = 'grab';
-    if (didDrag) {
-      container.dataset.dragged = 'true';
-    }
-  });
-
-  renderer.domElement.addEventListener('pointerleave', () => {
-    isDragging = false;
-    lastDragTime = performance.now();
-    renderer.domElement.style.cursor = 'grab';
-  });
-
-  function animate() {
-    requestAnimationFrame(animate);
-
-    if (pivot) {
-      if (!isDragging && performance.now() - lastDragTime > autoRotateDelayMs) {
-        rotationY += autoRotateSpeed;
-      }
-      pivot.rotation.y = rotationY;
-    }
-
-    camera.lookAt(0, 0, 0);
-    
-    renderer.render(scene, camera);
-  }
-
-  animate();
+async function fetchEggs() {
+  const res = await fetch('/api/list_eggs');
+  return res.json(); // array of { name, hint, author, texture, max_redeems, egg_id? }
 }
 
-function buildGrid() {
+async function voteEgg(endpoint, eggId) {
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ egg_id: eggId }),
+  });
+  if (res.status === 401) {
+    alert('You must be logged in to vote.');
+  }
+}
+
+async function buildGrid() {
+  const eggs = await fetchEggs();
   const grid = document.getElementById('eggGrid');
   grid.innerHTML = '';
 
-  EGGS.forEach((egg) => {
+  // Store eggs by their index so we can look them up on click, REPLACE WITH ANOTHER FIELD IN TABLE
+  grid._eggs = eggs;
+
+  eggs.forEach((egg, index) => {
     const card = document.createElement('div');
     card.className = 'egg-container';
 
+    const ext = egg.user_avatar?.startsWith("a_") ? "gif" : "png";
+
+    const avatarUrl = egg.user_avatar
+      ? `https://cdn.discordapp.com/avatars/${egg.user_id}/${egg.user_avatar}.${ext}`
+      : "https://cdn.discordapp.com/embed/avatars/0.png";
+
     card.innerHTML = `
-      <div class="egg-stage" id="egg-${egg.id}">
+      <div class="egg-stage" id="egg-${index}">
         <div class="egg-actions">
           <button class="egg-action egg-like" type="button">GOOD</button>
           <button class="egg-action egg-dislike" type="button">BAD</button>
@@ -143,77 +45,92 @@ function buildGrid() {
       </div>
       <div class="egg-info">
         <div class="egg-name">${egg.name}</div>
-        <div class="egg-creator">Uploaded by: ${egg.creator} <img class="creator-img" src="https://www.gravatar.com/avatar/359e957a7aa4fda8393c1d5340e6c239?s=64&d=identicon&r=PG&f=y&so-version=2"/></div>
-
+        <div class="egg-creator">
+          Uploaded by: ${egg.author}
+          <img class="creator-img" src="${avatarUrl}"/>
+        </div>
       </div>
     `;
 
     grid.appendChild(card);
 
-    const stageElement = card.querySelector(`.egg-stage`);
-    loadEgg(stageElement, egg.texture);
+    const stageElement = card.querySelector('.egg-stage');
+    loadEgg(stageElement, egg.texture, { modelPath: MODEL_PATH, repeatNumber: egg.textureSize });
 
-    const likeButton = card.querySelector('.egg-like');
-    const dislikeButton = card.querySelector('.egg-dislike');
-    likeButton.addEventListener('click', (event) => {
-      event.stopPropagation();
-      console.log('Like:', egg.id); // WE HAVE TO CHANGE THIS
+    card.querySelector('.egg-like').addEventListener('click', (e) => {
+      e.stopPropagation();
+      voteEgg('/api/like_egg', egg.egg_id);
     });
-    dislikeButton.addEventListener('click', (event) => {
-      event.stopPropagation();
-      console.log('Dislike:', egg.id); // WE HAVE TO CHANGE THIS
+
+    card.querySelector('.egg-dislike').addEventListener('click', (e) => {
+      e.stopPropagation();
+      voteEgg('/api/dislike_egg', egg.egg_id);
     });
   });
 }
 
-document.getElementById("eggGrid").addEventListener("click", (event) => {
+document.getElementById('eggGrid').addEventListener('click', (event) => {
   if (event.target.closest('.egg-action')) return;
-  const stage = event.target.closest(".egg-stage");
+  const stage = event.target.closest('.egg-stage');
   if (!stage) return;
   if (stage.dataset.dragged === 'true') {
     stage.dataset.dragged = '';
     return;
   }
-
-  const id = stage.id; // e.g. "egg-3"
-  console.log("Clicked:", id);
-
-  showOverlay(id);
+  showOverlay(stage.id);
 });
 
 function showOverlay(id) {
-  const overlay = document.createElement("div");
-  overlay.className = "overlay";
+  const index = parseInt(id.replace('egg-', ''), 10);
+  const egg = document.getElementById('eggGrid')._eggs[index];
+  if (!egg) return;
 
-  const box = document.createElement("div");
-  box.className = "overlay-box";
 
-  const eggPreview = document.createElement("div");
-  eggPreview.className = "overlay-preview";
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
 
-  const eggInfo = document.createElement("div");
-  eggInfo.className = "overlay-info";
+  const box = document.createElement('div');
+  box.className = 'overlay-box';
 
-  const egg = EGGS.find(e => `egg-${e.id}` === id);
+  const eggPreview = document.createElement('div');
+  eggPreview.className = 'overlay-preview';
+
+  const eggInfo = document.createElement('div');
+  eggInfo.className = 'overlay-info';
 
   eggInfo.innerHTML = `
-    <h2>${egg.name}</h2>
-    <p>Creator: ${egg.creator}</p>
-    <p>Redeemable ONLY first who gets it: ${egg.redeemable}</p>
-    <p>Hint: ${egg.hint}</p>
-  `;
+  <div class="egg-label">Easter Egg</div>
+  <h2 class="egg-name">${egg.name}</h2>
+  <div class="egg-fields">
+    <div class="egg-row">
+      <span class="egg-key">Creator:</span>
+      <span class="egg-value">@${egg.author}</span>
+    </div>
+    <div class="egg-row">
+      <span class="egg-key">Redeems:</span>
+      <span class="egg-redeem-badge">
+        ${egg.max_redeems} left
+      </span>
+    </div>
+    <div class="egg-row">
+      <span class="egg-key">Hint / Task:</span>
+      <span class="egg-hint">NOTHINGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</span>
+    </div>
+  </div>
+`;
 
-  setTimeout(() => {
-  loadEgg(eggPreview, egg.texture);
-    }, 0);
+  setTimeout(
+    () => loadEgg(eggPreview, egg.texture, { modelPath: MODEL_PATH, repeatNumber: egg.textureSize, enableResize: true }),
+    0
+  );
 
   box.appendChild(eggPreview);
   box.appendChild(eggInfo);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
 
-  overlay.addEventListener("click", () => overlay.remove());
-  box.addEventListener("click", (e) => e.stopPropagation());
+  overlay.addEventListener('click', () => overlay.remove());
+  box.addEventListener('click', (e) => e.stopPropagation());
 }
 
 buildGrid();
