@@ -1221,6 +1221,13 @@ a {
   height: 12px; /* covers the gap */
 }
 
+#authArea {
+  visibility: hidden;
+}
+#authArea.ready {
+  visibility: visible;
+}
+
 .user-info {
   display: flex;
   align-items: center;
