@@ -23,7 +23,6 @@ from rate_limiter import rate_limit, get_rate_limiter  # NEW: Import rate limite
 app = Flask(
     __name__, static_folder="./src/assets", static_url_path="/egghunt/assets", template_folder="./src"
 )
-app.config["APPLICATION_ROOT"] = "/egghunt"
 
 from werkzeug.middleware.proxy_fix import ProxyFix
 
