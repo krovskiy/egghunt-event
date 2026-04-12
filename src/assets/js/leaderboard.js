@@ -44,7 +44,8 @@ const renderList = (listElement, entries, label) => {
   });
 };
 
-const BASE_PATH = '/egghunt';
+window.EGGHUNT_BASE_PATH = window.EGGHUNT_BASE_PATH || '/egghunt';
+const BASE_PATH = window.EGGHUNT_BASE_PATH;
 const API_BASE = `${BASE_PATH}/api`;
 
 const loadLeaderboard = async () => {
