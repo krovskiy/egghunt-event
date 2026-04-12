@@ -82,11 +82,17 @@ function buildGrid(data, gridID) {
       ? `https://cdn.discordapp.com/avatars/${egg.author_id}/${egg.author_avatar}.${ext}`
       : "https://cdn.discordapp.com/embed/avatars/0.png";
 
-    card.innerHTML = `
-      <div class="egg-stage" id="egg-${egg.egg_id}">
-      <div class="egg-actions">
+    const qrActionHtml = gridID === 'eggGrid-Redeemed'
+      ? ''
+      : `
+        <div class="egg-actions">
           <button class="egg-action egg-qrcode" type="button">VIEW QR CODE</button>
         </div>
+      `;
+
+    card.innerHTML = `
+      <div class="egg-stage" id="egg-${egg.egg_id}">
+      ${qrActionHtml}
       </div>
       <div class="egg-info">
         <div class="egg-name"><b>${egg.name}</b></div>
@@ -95,7 +101,9 @@ function buildGrid(data, gridID) {
 
     grid.appendChild(card);
 
-    card.querySelector('.egg-qrcode').addEventListener('click', (e) => {
+    const qrButton = card.querySelector('.egg-qrcode');
+    if (qrButton) {
+      qrButton.addEventListener('click', (e) => {
       e.stopPropagation();
       const overlay = document.createElement("div");
       overlay.className = "overlay";
@@ -239,7 +247,8 @@ function buildGrid(data, gridID) {
 
       overlay.addEventListener("click", () => overlay.remove());
       box.addEventListener("click", (e) => e.stopPropagation());
-    });
+      });
+    }
 
     const stageElement = card.querySelector(`.egg-stage`);
     
@@ -282,7 +291,7 @@ function buildGrid(data, gridID) {
   });
 }
 
-function showOverlay(id, data) {
+function showOverlay(id, data, options = {}) {
 
   const overlay = document.createElement("div");
   overlay.className = "overlay";
@@ -298,7 +307,8 @@ function showOverlay(id, data) {
 
   const egg = data.find(e => `egg-${e.egg_id}` === id);
 
-  const isAuthor = currentUserId && egg.author_id === currentUserId;
+  const { allowActions = true } = options;
+  const isAuthor = currentUserId && egg.author_id === currentUserId && allowActions;
 
   const actionsHtml = isAuthor
     ? `
@@ -478,7 +488,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         stage.dataset.dragged = '';
         return;
       }
-      showOverlay(stage.id, created);
+      showOverlay(stage.id, created, { allowActions: true });
     });
 
     document.getElementById("eggGrid-Redeemed").addEventListener("click", (event) => {
@@ -488,7 +498,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         stage.dataset.dragged = '';
         return;
       }
-      showOverlay(stage.id, redeemed);
+      showOverlay(stage.id, redeemed, { allowActions: false });
     });
   } catch (err) {
     console.error("Couldn't fetch!", err);

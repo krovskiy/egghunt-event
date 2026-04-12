@@ -41,6 +41,11 @@ CACHE_MAX_SIZE = 1000  # FIX: prevent unbounded growth
 # file prepare texture
 ALLOWED_IMAGE_TYPES = {"png", "jpeg", "jpg", "gif", "webp"}  # FIX: whitelist image types
 MAX_TEXTURE_BYTES = 5 * 1024 * 1024
+MAX_NAME_LEN = 60
+MAX_HINT_LEN = 280
+MAX_REWARD_LEN = 140
+MAX_REDEEMS_LIMIT = 99
+DEFAULT_AVATAR = "https://cdn.discordapp.com/embed/avatars/0.png"
 
 def _evict_expired_tokens() -> None:
     """FIX: sweep expired entries instead of only evicting on hit."""
@@ -152,13 +157,23 @@ def rules_static() -> str:
 
 @app.route("/create-egg")
 def create_egg_static() -> str:
+    allowed, _ = get_current_user(request)
+    if not allowed:
+        return redirect("/login", 302)
     edit_id = request.args.get("edit")
     return render_template("/create-egg/index.html", edit_id=edit_id)
 
 
 @app.route("/my-eggs")
 def my_eggs_static() -> str:
+    allowed, _ = get_current_user(request)
+    if not allowed:
+        return redirect("/login", 302)
     return render_template("/my-eggs/index.html")
+
+@app.route("/leaderboard")
+def leaderboard_static() -> str:
+    return render_template("/leaderboard/index.html")
 
 
 class TextureError(Exception):
@@ -194,12 +209,157 @@ def prepare_texture(base64_data: str) -> str:
         return texture_path.relative_to(Path(FLASK_ROOT) / "src").as_posix()
 
 
+def _normalize_text(value: object, field_name: str, max_len: int, allow_empty: bool = False) -> tuple[str | None, str | None]:
+    if value is None:
+        return None, f"{field_name} is required"
+    if not isinstance(value, str):
+        return None, f"{field_name} must be a string"
+
+    text = value.strip()
+    if not text and not allow_empty:
+        return None, f"{field_name} is required"
+    if len(text) > max_len:
+        return None, f"{field_name} is too long (max {max_len} chars)"
+    if "<" in text or ">" in text:
+        return None, f"{field_name} contains invalid characters"
+    if "\x00" in text:
+        return None, f"{field_name} contains invalid characters"
+
+    return text, None
+
+
+def _parse_max_redeems(value: object) -> tuple[int | None, str | None]:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None, "max_redeems must be a number"
+
+    if parsed < 1:
+        return None, "max_redeems must be at least 1"
+    if parsed > MAX_REDEEMS_LIMIT:
+        return None, f"max_redeems must be at most {MAX_REDEEMS_LIMIT}"
+
+    return parsed, None
+
+
+def _split_csv(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [item for item in value.split(",") if item]
+
+
+def _avatar_url(user_id: str | None, avatar_hash: str | None) -> str:
+    if not user_id or not avatar_hash:
+        return DEFAULT_AVATAR
+    ext = "gif" if avatar_hash.startswith("a_") else "png"
+    return f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.{ext}"
+
+
 @app.route("/api/list_eggs", methods=["GET"])
 def list_eggs() -> tuple[Response, int]:
+    allowed, user_data = get_current_user(request)
+    user_id = user_data["id"] if allowed and user_data else None
+
+    limit = request.args.get("limit", type=int)
+    offset = request.args.get("offset", default=0, type=int)
+
     with DB("db.db") as db:
         eggs = db.list_eggs()
+        if limit is not None:
+            eggs = eggs[offset:offset + limit]
+        redeemed_ids = set()
+        if user_id:
+            redeemed = db.get_user_eggs(user_id)
+            redeemed_ids = {egg.egg_id for egg in redeemed}
 
-    return jsonify([egg.model_dump(exclude={"egg_id"}) for egg in eggs]), 200
+    payload = []
+    for egg in eggs:
+        data = egg.model_dump()
+        data["redeemed_by_me"] = egg.egg_id in redeemed_ids
+        payload.append(data)
+
+    return jsonify(payload), 200
+
+
+@app.route("/api/list_eggs_by_feedback", methods=["GET"])
+def list_eggs_by_feedback() -> tuple[Response, int]:
+    allowed, user_data = get_current_user(request)
+    user_id = user_data["id"] if allowed and user_data else None
+
+    limit = request.args.get("limit", type=int)
+    offset = request.args.get("offset", default=0, type=int)
+
+    with DB("db.db") as db:
+        results = db.list_eggs_by_feedback(limit=limit, offset=offset)
+        redeemed_ids = set()
+        if user_id:
+            redeemed = db.get_user_eggs(user_id)
+            redeemed_ids = {egg.egg_id for egg in redeemed}
+
+    payload = []
+    for row in results:
+        egg = row["egg"]
+        data = egg.model_dump()
+        data["redeemed_by_me"] = egg.egg_id in redeemed_ids
+        data["likes"] = row["like_count"]
+        data["dislikes"] = row["dislike_count"]
+        payload.append(data)
+
+    return jsonify(payload), 200
+
+
+@app.route("/api/leaderboard", methods=["GET"])
+def leaderboard() -> tuple[Response, int]:
+    limit = request.args.get("limit", default=5, type=int)
+
+    likes_by_author: dict[str, int] = {}
+    redeemed_by_user: dict[str, int] = {}
+    user_meta: dict[str, dict[str, str]] = {}
+
+    with DB("db.db") as db:
+        rows = db.get_leaderboard_source()
+
+    for author_id, author, author_avatar, liked_users, redeemed_users in rows:
+        if author_id:
+            user_meta[author_id] = {
+                "name": author or "Unknown",
+                "avatar": _avatar_url(author_id, author_avatar),
+            }
+
+        like_count = len(_split_csv(liked_users))
+        if author_id:
+            likes_by_author[author_id] = likes_by_author.get(author_id, 0) + like_count
+
+        for user_id in _split_csv(redeemed_users):
+            redeemed_by_user[user_id] = redeemed_by_user.get(user_id, 0) + 1
+
+    top_likes = sorted(likes_by_author.items(), key=lambda item: item[1], reverse=True)[:limit]
+    top_redeems = sorted(redeemed_by_user.items(), key=lambda item: item[1], reverse=True)[:limit]
+
+    likes_payload = []
+    for user_id, total_likes in top_likes:
+        meta = user_meta.get(user_id, {"name": user_id, "avatar": DEFAULT_AVATAR})
+        likes_payload.append({
+            "user_id": user_id,
+            "name": meta["name"],
+            "avatar": meta["avatar"],
+            "total": total_likes,
+        })
+
+    redeems_payload = []
+    for user_id, total_redeems in top_redeems:
+        meta = user_meta.get(user_id, {"name": user_id, "avatar": DEFAULT_AVATAR})
+        redeems_payload.append({
+            "user_id": user_id,
+            "name": meta["name"],
+            "avatar": meta["avatar"],
+            "total": total_redeems,
+        })
+
+    return jsonify({
+        "top_likes": likes_payload,
+        "top_redeems": redeems_payload,
+    }), 200
 
 
 @app.route("/api/my_eggs", methods=["GET"])
@@ -265,12 +425,38 @@ def redeem_egg() -> tuple[Response, int]:
         "success": False,
     }
     with DB("db.db") as db:
+        if not db.get_created_eggs(user_id):
+            return jsonify({"error": "Create at least one egg before redeeming."}), 403
         success = db.redeem_egg(user_id, egg_id)
         if success:
             e = db.get_egg(egg_id)
             response["egg"] = e.model_dump()
         response["success"] = success
     return jsonify(response), 200
+
+
+@app.route("/redeem_egg/<salted_hash>")
+def redeem_egg_public(salted_hash: str) -> Response:
+    """Redeem an egg via its public salted hash and redirect to /my_eggs."""
+    allowed, user_data = get_current_user(request)
+    if not allowed:
+        return redirect("/login", 302)
+
+    user_id = user_data["id"]
+
+    try:
+        with DB("db.db") as db:
+            if not db.get_created_eggs(user_id):
+                return redirect("/my-eggs?error=must_create", 302)
+            egg = db.get_egg_by_hash(salted_hash)
+            success = db.redeem_egg(user_id, egg.egg_id)
+    except Exception as exc:
+        print(f"Redeem failed: {exc}")
+        return redirect("/my-eggs?error=invalid_egg", 302)
+
+    if success:
+        return redirect("/my-eggs?redeemed=true", 302)
+    return redirect("/my-eggs?error=redeem_failed", 302)
 
 
 # added by dima;  adds a created egg to the db
@@ -291,6 +477,7 @@ def create_egg() -> tuple[Response, int]:
     texture = data.get("texture")
     max_redeems = data.get("max_redeems", 1)
     texture_size = data.get("textureSize", 0)
+    reward = data.get("reward", "")
  
     # FIX: extract author info from verified Discord token
     user_id = user_data["id"]
@@ -299,6 +486,27 @@ def create_egg() -> tuple[Response, int]:
 
     if not all([user_id, name, hint, texture]):
         return jsonify({"error": "name, hint and texture are required"}), 400
+
+    name, name_error = _normalize_text(name, "name", MAX_NAME_LEN)
+    if name_error:
+        return jsonify({"error": name_error}), 400
+
+    hint, hint_error = _normalize_text(hint, "hint", MAX_HINT_LEN)
+    if hint_error:
+        return jsonify({"error": hint_error}), 400
+
+    reward, reward_error = _normalize_text(reward, "reward", MAX_REWARD_LEN, allow_empty=True)
+    if reward_error:
+        return jsonify({"error": reward_error}), 400
+
+    max_redeems, max_redeems_error = _parse_max_redeems(max_redeems)
+    if max_redeems_error:
+        return jsonify({"error": max_redeems_error}), 400
+
+    try:
+        texture_size = int(texture_size)
+    except (TypeError, ValueError):
+        return jsonify({"error": "textureSize must be a number"}), 400
 
     # FIX: file written before the check above ^
     try:
@@ -316,6 +524,7 @@ def create_egg() -> tuple[Response, int]:
             texture=texture_path,
             max_redeems=max_redeems,
             textureSize=texture_size,
+            reward=reward,
         )
 
     return jsonify({"success": success, "egg_id": egg_id}), 200
@@ -338,9 +547,31 @@ def update_egg(egg_id: str) -> tuple[Response, int]:
     max_redeems = data.get("max_redeems", 1)
     texture_size = data.get("textureSize", 0)
     texture = data.get("texture")
+    reward = data.get("reward", "")
 
     if not all([name, hint]):
         return jsonify({"error": "name and hint are required"}), 400
+
+    name, name_error = _normalize_text(name, "name", MAX_NAME_LEN)
+    if name_error:
+        return jsonify({"error": name_error}), 400
+
+    hint, hint_error = _normalize_text(hint, "hint", MAX_HINT_LEN)
+    if hint_error:
+        return jsonify({"error": hint_error}), 400
+
+    reward, reward_error = _normalize_text(reward, "reward", MAX_REWARD_LEN, allow_empty=True)
+    if reward_error:
+        return jsonify({"error": reward_error}), 400
+
+    max_redeems, max_redeems_error = _parse_max_redeems(max_redeems)
+    if max_redeems_error:
+        return jsonify({"error": max_redeems_error}), 400
+
+    try:
+        texture_size = int(texture_size)
+    except (TypeError, ValueError):
+        return jsonify({"error": "textureSize must be a number"}), 400
 
     with DB("db.db") as db:
         egg = db.get_egg(egg_id)
@@ -368,6 +599,7 @@ def update_egg(egg_id: str) -> tuple[Response, int]:
             max_redeems=max_redeems,
             texture=texture_path,
             textureSize=texture_size,
+            reward=reward,
         )
 
     return jsonify({"success": success, "egg_id": egg_id}), 200
