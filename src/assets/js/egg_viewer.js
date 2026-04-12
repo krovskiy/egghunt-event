@@ -1,6 +1,33 @@
-import { Scene, PerspectiveCamera, WebGLRenderer, AmbientLight, DirectionalLight, TextureLoader, RepeatWrapping, Box3, Vector3, Group } from 'https://cdn.jsdelivr.net/npm/three@0.182.0/+esm';
+import { Scene, PerspectiveCamera, WebGLRenderer, AmbientLight, DirectionalLight, TextureLoader, RepeatWrapping, Box3, Vector3, Group, Cache } from 'https://cdn.jsdelivr.net/npm/three@0.182.0/+esm';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/loaders/GLTFLoader.js/+esm';
 import { MeshoptDecoder } from 'https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/libs/meshopt_decoder.module.js/+esm';
+import * as SkeletonUtils from 'https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/SkeletonUtils.js/+esm';
+
+Cache.enabled = true;
+
+const modelCache = new Map();
+
+async function getModelInstance(modelPath) {
+  if (!modelCache.has(modelPath)) {
+    const promise = new Promise((resolve, reject) => {
+      const loader = new GLTFLoader();
+      loader.setMeshoptDecoder(MeshoptDecoder);
+      loader.load(modelPath, (gltf) => resolve(gltf.scene), undefined, reject);
+    });
+    modelCache.set(modelPath, promise);
+  }
+
+  const baseScene = await modelCache.get(modelPath);
+  const clonedScene = SkeletonUtils.clone(baseScene);
+  
+  clonedScene.traverse((child) => {
+    if (child.isMesh && child.material) {
+      child.material = child.material.clone();
+    }
+  });
+
+  return clonedScene;
+}
 
 export function loadEgg(container, texturePath, options = {}) {
   const { modelPath, enableResize = false, onError, repeatNumber = 1 } = options;
@@ -72,10 +99,12 @@ export function loadEgg(container, texturePath, options = {}) {
   const autoRotateDelayMs = 900;
   const autoRotateSpeed = 0.003;
 
-  const loader = new GLTFLoader();
-  loader.setMeshoptDecoder(MeshoptDecoder);
-  loader.load(modelPath, (gltf) => {
-    model = gltf.scene;
+  let isCancelled = false;
+
+  getModelInstance(modelPath).then((clonedModel) => {
+    if (isCancelled) return;
+    
+    model = clonedModel;
     model.scale.setScalar(4);
 
     const box = new Box3().setFromObject(model);
@@ -85,7 +114,11 @@ export function loadEgg(container, texturePath, options = {}) {
 
     const textureLoader = new TextureLoader();
     textureLoader.load(texturePath, (texture) => {
-      texture.repeat.set(repeatNumber - 1, repeatNumber);
+      if (isCancelled) {
+        texture.dispose();
+        return;
+      }
+      texture.repeat.set(repeatNumber, repeatNumber);
       texture.wrapS = RepeatWrapping;
       texture.wrapT = RepeatWrapping;
 
@@ -100,10 +133,8 @@ export function loadEgg(container, texturePath, options = {}) {
     pivot = new Group();
     pivot.add(model);
     scene.add(pivot);
-  }, undefined, (error) => {
-    if (onError) {
-      onError(error);
-    }
+  }).catch((error) => {
+    if (onError && !isCancelled) onError(error);
   });
 
   const domElement = renderer.domElement;
@@ -165,5 +196,23 @@ export function loadEgg(container, texturePath, options = {}) {
 
   animate();
 
-  return () => { animating = false; };
+  return () => { 
+    animating = false; 
+    isCancelled = true;
+    window.removeEventListener('resize', resize);
+    if (pivot && model) {
+      model.traverse((child) => {
+        if (child.isMesh) {
+          // Do NOT dispose of geometry if we share it via SkeletonUtils.clone
+          if (child.material) {
+            if (child.material.map) child.material.map.dispose();
+            child.material.dispose();
+          }
+        }
+      });
+      scene.remove(pivot);
+    }
+    renderer.dispose();
+    renderer.forceContextLoss();
+  };
 }

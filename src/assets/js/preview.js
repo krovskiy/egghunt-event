@@ -6,6 +6,10 @@ const textureStatus = document.getElementById("textureStatus")
 const textureRepeatInput = document.querySelector(".eggTextureNumber")
 
 const MODEL_PATH = '../assets/models/egg.glb';
+const MAX_NAME_LEN = 60;
+const MAX_HINT_LEN = 280;
+const MAX_REWARD_LEN = 140;
+const MAX_REDEEMS = 99;
 
 const stageElement = document.getElementById('createEggPreview');
 let currentTextureUrl = null;
@@ -279,6 +283,7 @@ submit.addEventListener("click", async (e)=>{
   let eggName = document.getElementById("eggName");
   let eggHint = document.getElementById("eggHint");
   let eggMaxRedeems = document.getElementById("eggMaxRedeems");
+  let eggReward = document.getElementById("eggReward");
   const repeatValue = Number(textureRepeatInput?.value ?? 1);
 
   let file = null;
@@ -295,8 +300,38 @@ submit.addEventListener("click", async (e)=>{
       return;
     }
 
-    if (eggName.value === "" || eggHint.value === "" || eggMaxRedeems.value === "") {
+    const nameValue = eggName.value.trim();
+    const hintValue = eggHint.value.trim();
+    const rewardValue = eggReward.value.trim();
+    const maxRedeemsValue = Number(eggMaxRedeems.value);
+
+    if (!nameValue || !hintValue || !eggMaxRedeems.value) {
       showFailureToast('Error: One of the fields is empty!');
+      return;
+    }
+
+    if (nameValue.length > MAX_NAME_LEN) {
+      showFailureToast(`Error: Name is too long (max ${MAX_NAME_LEN} chars).`);
+      return;
+    }
+
+    if (hintValue.length > MAX_HINT_LEN) {
+      showFailureToast(`Error: Hint is too long (max ${MAX_HINT_LEN} chars).`);
+      return;
+    }
+
+    if (rewardValue.length > MAX_REWARD_LEN) {
+      showFailureToast(`Error: Reward is too long (max ${MAX_REWARD_LEN} chars).`);
+      return;
+    }
+
+    if (nameValue.includes('<') || nameValue.includes('>') || hintValue.includes('<') || hintValue.includes('>') || rewardValue.includes('<') || rewardValue.includes('>')) {
+      showFailureToast('Error: Text fields contain invalid characters.');
+      return;
+    }
+
+    if (!Number.isFinite(maxRedeemsValue) || maxRedeemsValue < 1 || maxRedeemsValue > MAX_REDEEMS) {
+      showFailureToast(`Error: Max redeems must be between 1 and ${MAX_REDEEMS}.`);
       return;
     }
 
@@ -310,10 +345,11 @@ submit.addEventListener("click", async (e)=>{
     const method = isEdit ? "PUT" : "POST";
 
     const payload = {
-      "name": eggName.value,
-      "hint": eggHint.value,
-      "max_redeems": eggMaxRedeems.value,
+      "name": nameValue,
+      "hint": hintValue,
+      "max_redeems": maxRedeemsValue,
       "textureSize": repeatValue,
+      "reward": rewardValue
     };
 
     if (textureBase64) {
@@ -333,7 +369,10 @@ submit.addEventListener("click", async (e)=>{
 
     if (!res.ok) {
       console.error("Failed to fetch", body);
-      showFailureToast('Error: Failed to create egg. Please try again.');
+      const message = typeof body === 'object' && body && body.error
+        ? `Error: ${body.error}`
+        : 'Error: Failed to create egg. Please try again.';
+      showFailureToast(message);
       return;
     }
 
