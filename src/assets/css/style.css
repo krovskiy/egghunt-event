@@ -1319,13 +1319,12 @@ a.sponsor {
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
   z-index: 10000;
   transition: top 0.35s ease;
-  font-size: 8px;
+  font-size: 12px;
 }
 
 .toast span {
   white-space: normal;
   line-height: 1.4;
-  font-size: 8px;
 }
 
 .toast.is-visible {
