@@ -1349,6 +1349,24 @@ a.sponsor {
 
 
 @media (max-width: 720px) {
+  .create-egg-preview {
+    min-height: auto;
+  }
+
+  .create-egg-canvas {
+    min-height: 320px;
+    height: min(60vh, 420px);
+
+  }
+
+  .create-egg-layout {
+    width: 94vw;
+  }
+
+  .create-egg-form {
+    min-height: auto;
+  }
+
   .rules-container{
     grid-template-columns: minmax(280px, 1fr);
   }
@@ -1513,4 +1531,11 @@ a.sponsor {
   font-size: 12px;
   min-width: 50px;
   max-width: 180px;
+}
+
+@media (max-width: 665px) {
+  .create-egg-canvas {
+    min-height: 240px;
+    height: min(52vh, 340px);
+  }
 }
