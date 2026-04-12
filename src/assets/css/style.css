@@ -857,7 +857,6 @@ a.sponsor {
   .overlay-qrcode {
     width: min(95vw, 600px);
     height: auto;
-    max-height: 95vh;
   }
 
   .qrcode-container {
