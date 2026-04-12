@@ -152,13 +152,18 @@ function renderEggs(eggs, append = false) {
         </div>
       </div>
       <div class="egg-info">
-        <div class="egg-name"><b>${egg.name}</b></div>
+        <div class="egg-name"><b></b></div>
         <div class="egg-creator">
-          Uploaded by: ${egg.author}
+          Uploaded by: <span class="egg-author"></span>
           <img class="creator-img" src="${avatarUrl}"/>
         </div>
       </div>
     `;
+
+    const nameEl = card.querySelector('.egg-name b');
+    if (nameEl) nameEl.textContent = egg.name ?? '';
+    const authorEl = card.querySelector('.egg-author');
+    if (authorEl) authorEl.textContent = egg.author ?? '';
 
     const stage = card.querySelector('.egg-stage');
     stage.dataset.eggId = egg.egg_id;

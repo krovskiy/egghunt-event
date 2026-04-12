@@ -264,11 +264,30 @@ class DB:
                 "salted_hash",
                 "ALTER TABLE eyren ADD COLUMN salted_hash   TEXT NOT NULL DEFAULT ''",
             ),
+            (
+                "like_count",
+                "ALTER TABLE eyren ADD COLUMN like_count INTEGER NOT NULL DEFAULT 0",
+            ),
+            (
+                "dislike_count",
+                "ALTER TABLE eyren ADD COLUMN dislike_count INTEGER NOT NULL DEFAULT 0",
+            ),
         ]
         for col, sql in migrations:
             if col not in existing:
                 conn.execute(sql)
 
+        conn.execute("""
+        UPDATE eyren SET 
+            like_count = CASE 
+                WHEN liked_users IS NULL OR liked_users = '' THEN 0
+                ELSE (length(liked_users) - length(replace(liked_users, ',', '')) + 1)
+            END,
+            dislike_count = CASE 
+                WHEN disliked_users IS NULL OR disliked_users = '' THEN 0
+                ELSE (length(disliked_users) - length(replace(disliked_users, ',', '')) + 1)
+            END
+        """)
         # Backfill salted_hash for existing rows that predate this column.
         try:
             rows = conn.execute(
@@ -360,14 +379,16 @@ class DB:
             return False, egg_id
         return True, egg_id
 
-    def get_egg(self, egg_id: str) -> Egg:
+    def get_egg(self, egg_id: str) -> Egg | None:
         try:
             ret = self.conn.execute(self.__GET_EGGS_QUERY__, (egg_id,)).fetchone()
         except sqlite.OperationalError as e:
             raise DBError(e) from e
+        if ret is None:
+            return None
         return self._row_to_egg(ret)
 
-    def get_egg_by_hash(self, salted_hash: str) -> Egg:
+    def get_egg_by_hash(self, salted_hash: str) -> Egg | None:
         """Fetch an egg by its public salted_hash (used for QR code URLs)."""
         try:
             ret = self.conn.execute(
@@ -375,6 +396,8 @@ class DB:
             ).fetchone()
         except sqlite.OperationalError as e:
             raise DBError(e) from e
+        if ret is None:
+            return None
         return self._row_to_egg(ret)
 
     def update_egg(
@@ -418,6 +441,12 @@ class DB:
             self.conn.execute(
                 self.__DISLIKE_EGG_QUERY__, {"id": egg_id, "user_id": user_id}
             )
+            # FIX: Increment count only if the user was actually added
+            self.conn.execute(
+                """UPDATE eyren SET dislike_count = dislike_count + 1 
+                WHERE id = :id AND ',' || disliked_users || ',' NOT LIKE '%,' || :user_id || ',%'""",
+                {"id": egg_id, "user_id": user_id},
+            )
             self.conn.commit()
         except Exception as e:
             raise DBError(e) from e
@@ -427,9 +456,24 @@ class DB:
             self.conn.execute(
                 self.__LIKE_EGG_QUERY__, {"id": egg_id, "user_id": user_id}
             )
+            # FIX: Increment count only if the user was actually added
+            self.conn.execute(
+                """UPDATE eyren SET like_count = like_count + 1 
+                WHERE id = :id AND ',' || liked_users || ',' LIKE '%,' || :user_id || ',%'""",
+                {"id": egg_id, "user_id": user_id},
+            )
             self.conn.commit()
         except Exception as e:
             raise DBError(e) from e
+
+    def count_texture_usage(self, texture: str) -> int:
+        try:
+            row = self.conn.execute(
+                "SELECT COUNT(1) FROM eyren WHERE texture = ?", (texture,)
+            ).fetchone()
+        except sqlite.OperationalError as e:
+            raise DBError(e) from e
+        return int(row[0]) if row else 0
 
     def redeem_egg(self, user_id: str | int, egg_id: str) -> bool:
         uid = str(user_id)

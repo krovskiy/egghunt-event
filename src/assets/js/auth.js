@@ -18,28 +18,38 @@ async function checkAuth() {
       const user = await res.json();
       setAuthOnlyVisibility(true);
 
-      const ext = user.avatar.startsWith("a_") ? "gif" : "png";
-      const avatarUrl = `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${ext}`;
+      const ext = user.avatar?.startsWith("a_") ? "gif" : "png";
+      const avatarUrl = user.avatar
+        ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${ext}`
+        : "https://cdn.discordapp.com/embed/avatars/0.png";
 
-      document.getElementById('authArea').innerHTML = `
-        <div class="user-info">
-          <img src="${avatarUrl}" alt="avatar" class="user-avatar"/>
-          <div class="user-names">
-            <span class="user-global">${user.global_name}</span>
-            <span class="user-username">@${user.username}</span>
+      const authArea = document.getElementById('authArea');
+      if (authArea) {
+        authArea.innerHTML = `
+          <div class="user-info">
+            <img src="${avatarUrl}" alt="avatar" class="user-avatar"/>
+            <div class="user-names">
+              <span class="user-global"></span>
+              <span class="user-username"></span>
+            </div>
           </div>
-        </div>
-        <div class="user-dropdown">
-          <button class="logout-btn">
-          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#e00550" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-            <polyline points="16 17 21 12 16 7"/>
-            <line x1="21" y1="12" x2="9" y2="12"/>
-          </svg>
-          Log out
-          </button>
-        </div>
-      `;
+          <div class="user-dropdown">
+            <button class="logout-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#e00550" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            Log out
+            </button>
+          </div>
+        `;
+
+        const globalEl = authArea.querySelector('.user-global');
+        const usernameEl = authArea.querySelector('.user-username');
+        if (globalEl) globalEl.textContent = user.global_name || '';
+        if (usernameEl) usernameEl.textContent = `@${user.username || ''}`;
+      }
     } catch (e) {
       // token invalid, keep button
     } finally {

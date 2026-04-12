@@ -17,6 +17,7 @@ from flask.json import jsonify
 from requests import get, post
 
 from db import DB
+from rate_limiter import rate_limit, get_rate_limiter  # NEW: Import rate limiter
 
 app = Flask(
     __name__, static_folder="./src", static_url_path="/", template_folder="./src"
@@ -26,7 +27,7 @@ FLASK_ROOT = app.root_path
 CLIENT_ID = dotenv.dotenv_values(".env")["DISCORD_CLIENT_ID"]
 CLIENT_SECRET = dotenv.dotenv_values(".env")["DISCORD_SECRET"]
 REDIRECT_URI = dotenv.dotenv_values(".env")["REDIRECT_URI"]
-CALLBACK_URI = "http://localhost:5000/callback/discord"
+CALLBACK_URI = dotenv.dotenv_values(".env")["CALLBACK_URI"]
 
 
 # store ttl and in session - DIMA
@@ -52,7 +53,11 @@ MAX_HINT_LEN = 280
 MAX_REWARD_LEN = 140
 MAX_REDEEMS_LIMIT = 99
 DEFAULT_AVATAR = "https://cdn.discordapp.com/embed/avatars/0.png"
+REQUEST_TIMEOUT = 5
+MAX_TEXTURE_REPEAT = 5
+COOKIE_SECURE = dotenv.dotenv_values(".env").get("COOKIE_SECURE", "0") == "1"
 
+_leaderboard_cache: dict[str, tuple[dict, float]] = {"data": None, "expires": 0}
 
 def _evict_expired_tokens() -> None:
     """FIX: sweep expired entries instead of only evicting on hit."""
@@ -76,6 +81,7 @@ def verify_discord_token(access_token: str) -> tuple[bool, dict | None]:
     r = get(
         "https://discord.com/api/users/@me",
         headers={"Authorization": f"Bearer {access_token}"},
+        timeout=REQUEST_TIMEOUT,
     )
 
     # store that shit in token cache
@@ -102,7 +108,12 @@ def exchange_code(code: str) -> dict:
 
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
-    response = post("https://discord.com/api/oauth2/token", data=data, headers=headers)
+    response = post(
+        "https://discord.com/api/oauth2/token",
+        data=data,
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
+    )
     # FIX: return None on OAuth errors instead of raising KeyError later
     payload = response.json()
     if "access_token" not in payload:
@@ -154,7 +165,9 @@ def auth() -> Response:
     session["user"] = user_data
 
     resp = make_response(redirect("/"))
-    resp.set_cookie("discord_token", token, httponly=True, samesite="Lax")
+    resp.set_cookie(
+        "discord_token", token, httponly=True, samesite="Lax", secure=COOKIE_SECURE
+    )
     return resp
 
 
@@ -273,6 +286,71 @@ def _avatar_url(user_id: str | None, avatar_hash: str | None) -> str:
     ext = "gif" if avatar_hash.startswith("a_") else "png"
     return f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.{ext}"
 
+def get_leaderboard_cached(limit: int = 5, ttl: int = 60) -> dict:
+    """Cache leaderboard results for TTL seconds."""
+    now = time.time()
+    
+    # Return cached result if still fresh
+    if (
+        _leaderboard_cache["data"] is not None
+        and now < _leaderboard_cache["expires"]
+    ):
+        return _leaderboard_cache["data"]
+    
+    # Recompute (your logic here)
+    likes_by_author: dict[str, int] = {}
+    redeemed_by_user: dict[str, int] = {}
+    user_meta: dict[str, dict[str, str]] = {}
+    
+    with DB("db.db") as db:
+        rows = db.get_leaderboard_source()
+    
+    for author_id, author, author_avatar, liked_users, redeemed_users in rows:
+        if author_id:
+            user_meta[author_id] = {
+                "name": author or "Unknown",
+                "avatar": _avatar_url(author_id, author_avatar),
+            }
+        
+        like_count = len(_split_csv(liked_users))
+        if author_id:
+            likes_by_author[author_id] = likes_by_author.get(author_id, 0) + like_count
+        
+        for user_id in _split_csv(redeemed_users):
+            redeemed_by_user[user_id] = redeemed_by_user.get(user_id, 0) + 1
+    
+    top_likes = sorted(likes_by_author.items(), key=lambda x: x[1], reverse=True)[:limit]
+    top_redeems = sorted(redeemed_by_user.items(), key=lambda x: x[1], reverse=True)[:limit]
+    
+    likes_payload = [
+        {
+            "user_id": uid,
+            "name": user_meta.get(uid, {}).get("name", uid),
+            "avatar": user_meta.get(uid, {}).get("avatar", DEFAULT_AVATAR),
+            "total": total,
+        }
+        for uid, total in top_likes
+    ]
+    
+    redeems_payload = [
+        {
+            "user_id": uid,
+            "name": user_meta.get(uid, {}).get("name", uid),
+            "avatar": user_meta.get(uid, {}).get("avatar", DEFAULT_AVATAR),
+            "total": total,
+        }
+        for uid, total in top_redeems
+    ]
+    
+    result = {
+        "top_likes": likes_payload,
+        "top_redeems": redeems_payload,
+    }
+    
+    _leaderboard_cache["data"] = result
+    _leaderboard_cache["expires"] = now + ttl
+    return result
+
 
 @app.route("/api/list_eggs", methods=["GET"])
 def list_eggs() -> tuple[Response, int]:
@@ -326,72 +404,14 @@ def list_eggs_by_feedback() -> tuple[Response, int]:
 
     return jsonify(payload), 200
 
-
 @app.route("/api/leaderboard", methods=["GET"])
 def leaderboard() -> tuple[Response, int]:
     limit = request.args.get("limit", default=5, type=int)
-
-    likes_by_author: dict[str, int] = {}
-    redeemed_by_user: dict[str, int] = {}
-    user_meta: dict[str, dict[str, str]] = {}
-
-    with DB("db.db") as db:
-        rows = db.get_leaderboard_source()
-
-    for author_id, author, author_avatar, liked_users, redeemed_users in rows:
-        if author_id:
-            user_meta[author_id] = {
-                "name": author or "Unknown",
-                "avatar": _avatar_url(author_id, author_avatar),
-            }
-
-        like_count = len(_split_csv(liked_users))
-        if author_id:
-            likes_by_author[author_id] = likes_by_author.get(author_id, 0) + like_count
-
-        for user_id in _split_csv(redeemed_users):
-            redeemed_by_user[user_id] = redeemed_by_user.get(user_id, 0) + 1
-
-    top_likes = sorted(likes_by_author.items(), key=lambda item: item[1], reverse=True)[
-        :limit
-    ]
-    top_redeems = sorted(
-        redeemed_by_user.items(), key=lambda item: item[1], reverse=True
-    )[:limit]
-
-    likes_payload = []
-    for user_id, total_likes in top_likes:
-        meta = user_meta.get(user_id, {"name": user_id, "avatar": DEFAULT_AVATAR})
-        likes_payload.append(
-            {
-                "user_id": user_id,
-                "name": meta["name"],
-                "avatar": meta["avatar"],
-                "total": total_likes,
-            }
-        )
-
-    redeems_payload = []
-    for user_id, total_redeems in top_redeems:
-        meta = user_meta.get(user_id, {"name": user_id, "avatar": DEFAULT_AVATAR})
-        redeems_payload.append(
-            {
-                "user_id": user_id,
-                "name": meta["name"],
-                "avatar": meta["avatar"],
-                "total": total_redeems,
-            }
-        )
-
-    return jsonify(
-        {
-            "top_likes": likes_payload,
-            "top_redeems": redeems_payload,
-        }
-    ), 200
+    return jsonify(get_leaderboard_cached(limit=limit)), 200
 
 
 @app.route("/api/my_eggs", methods=["GET"])
+@rate_limit(limit=30)  # NEW: 30 requests per minute per user
 def my_eggs() -> tuple[Response, int]:
 
     # FIX: use get_current_user so session cache is respected
@@ -407,6 +427,7 @@ def my_eggs() -> tuple[Response, int]:
 
 # routes for created_eggs by USER by dima
 @app.route("/api/created_eggs", methods=["GET"])
+@rate_limit(limit=30)  # NEW: 30 requests per minute per user
 def created_eggs() -> tuple[Response, int]:
 
     allowed, user_data = get_current_user(request)
@@ -422,6 +443,7 @@ def created_eggs() -> tuple[Response, int]:
 
 # loads egg for EDIT
 @app.route("/api/egg/<egg_id>", methods=["GET"])
+@rate_limit(limit=30)  # NEW: 30 requests per minute per user
 def egg_detail(egg_id: str) -> tuple[Response, int]:
 
     allowed, user_data = get_current_user(request)
@@ -431,6 +453,8 @@ def egg_detail(egg_id: str) -> tuple[Response, int]:
 
     with DB("db.db") as db:
         egg = db.get_egg(egg_id)
+        if not egg:
+            return jsonify({"error": "Egg not found"}), 404
 
     if egg.author_id != user_id:
         return jsonify({"error": "Forbidden"}), 403
@@ -439,6 +463,7 @@ def egg_detail(egg_id: str) -> tuple[Response, int]:
 
 
 @app.route("/api/redeem_egg", methods=["POST"])
+@rate_limit(limit=10)  # NEW: 10 requests per minute per user (DB state change)
 def redeem_egg() -> tuple[Response, int]:
     # FIX: authenticate the request; reject user_id from the body
     allowed, user_data = get_current_user(request)
@@ -458,6 +483,8 @@ def redeem_egg() -> tuple[Response, int]:
     with DB("db.db") as db:
         if not db.get_created_eggs(user_id):
             return jsonify({"error": "Create at least one egg before redeeming."}), 403
+        if not db.get_egg(egg_id):
+            return jsonify({"error": "Egg not found"}), 404
         success = db.redeem_egg(user_id, egg_id)
         if success:
             e = db.get_egg(egg_id)
@@ -467,6 +494,7 @@ def redeem_egg() -> tuple[Response, int]:
 
 
 @app.route("/redeem_egg/<salted_hash>")
+@rate_limit(limit=10)  # NEW: 10 requests per minute per user
 def redeem_egg_public(salted_hash: str) -> Response:
     """Redeem an egg via its public salted hash and redirect to /my_eggs."""
     allowed, user_data = get_current_user(request)
@@ -480,6 +508,8 @@ def redeem_egg_public(salted_hash: str) -> Response:
             if not db.get_created_eggs(user_id):
                 return redirect("/my-eggs?error=must_create", 302)
             egg = db.get_egg_by_hash(salted_hash)
+            if not egg:
+                return redirect("/my-eggs?error=invalid_egg", 302)
             success = db.redeem_egg(user_id, egg.egg_id)
     except Exception as exc:
         print(f"Redeem failed: {exc}")
@@ -492,6 +522,7 @@ def redeem_egg_public(salted_hash: str) -> Response:
 
 # added by dima;  adds a created egg to the db
 @app.route("/api/create_egg", methods=["POST"])
+@rate_limit(limit=5)  # NEW: 5 requests per minute per user (file upload + DB write)
 def create_egg() -> tuple[Response, int]:
     # FIX: require authentication; don't trust user_id from the body
     allowed, user_data = get_current_user(request)
@@ -506,7 +537,7 @@ def create_egg() -> tuple[Response, int]:
     hint = data.get("hint")
     texture = data.get("texture")
     max_redeems = data.get("max_redeems", 1)
-    texture_size = data.get("textureSize", 0)
+    texture_size = data.get("textureSize", 1)
     reward = data.get("reward", "")
 
     # FIX: extract author info from verified Discord token
@@ -539,6 +570,10 @@ def create_egg() -> tuple[Response, int]:
         texture_size = int(texture_size)
     except (TypeError, ValueError):
         return jsonify({"error": "textureSize must be a number"}), 400
+    if texture_size < 1 or texture_size > MAX_TEXTURE_REPEAT:
+        return jsonify(
+            {"error": f"textureSize must be between 1 and {MAX_TEXTURE_REPEAT}"}
+        ), 400
 
     # FIX: file written before the check above ^
     try:
@@ -547,6 +582,11 @@ def create_egg() -> tuple[Response, int]:
         return jsonify({"error": str(e)}), 400
 
     with DB("db.db") as db:
+        created_eggs = db.get_created_eggs(user_id)
+        if len(created_eggs) >= 10:
+            return jsonify(
+                {"error": f"Maximum of 10 eggs per user allowed"}
+            ), 403
         success, egg_id = db.add_egg(
             name=name,
             hint=hint,
@@ -564,6 +604,7 @@ def create_egg() -> tuple[Response, int]:
 
 # route to update an egg with new information by dima
 @app.route("/api/update_egg/<egg_id>", methods=["PUT"])
+@rate_limit(limit=10)  # NEW: 10 requests per minute per user (file processing)
 def update_egg(egg_id: str) -> tuple[Response, int]:
 
     allowed, user_data = get_current_user(request)
@@ -578,7 +619,7 @@ def update_egg(egg_id: str) -> tuple[Response, int]:
     name = data.get("name")
     hint = data.get("hint")
     max_redeems = data.get("max_redeems", 1)
-    texture_size = data.get("textureSize", 0)
+    texture_size = data.get("textureSize")
     texture = data.get("texture")
     reward = data.get("reward", "")
 
@@ -603,15 +644,25 @@ def update_egg(egg_id: str) -> tuple[Response, int]:
     if max_redeems_error:
         return jsonify({"error": max_redeems_error}), 400
 
-    try:
-        texture_size = int(texture_size)
-    except (TypeError, ValueError):
-        return jsonify({"error": "textureSize must be a number"}), 400
-
     with DB("db.db") as db:
         egg = db.get_egg(egg_id)
+        if not egg:
+            return jsonify({"error": "Egg not found"}), 404
+        old_texture = egg.texture
         if egg.author_id != user_id:
             return jsonify({"error": "Forbidden"}), 403
+
+        if texture_size is None:
+            texture_size = egg.textureSize
+        else:
+            try:
+                texture_size = int(texture_size)
+            except (TypeError, ValueError):
+                return jsonify({"error": "textureSize must be a number"}), 400
+            if texture_size < 1 or texture_size > MAX_TEXTURE_REPEAT:
+                return jsonify(
+                    {"error": f"textureSize must be between 1 and {MAX_TEXTURE_REPEAT}"}
+                ), 400
 
         # FIX: resolve texture path if provided
         texture_path = texture if texture else egg.texture
@@ -636,11 +687,25 @@ def update_egg(egg_id: str) -> tuple[Response, int]:
             textureSize=texture_size,
             reward=reward,
         )
+        # FIX remove old textures after new one is applied
+        if (
+            success
+            and texture
+            and old_texture != texture_path
+            and db.count_texture_usage(old_texture) == 0
+        ):
+            try:
+                old_path = Path(FLASK_ROOT) / "src" / old_texture
+                if old_path.exists():
+                    old_path.unlink()
+            except Exception as e:
+                print(f"Warning: couldn't delete old texture {old_texture}: {e}")
 
     return jsonify({"success": success, "egg_id": egg_id}), 200
 
 
 @app.route("/api/delete_egg/<egg_id>", methods=["DELETE"])
+@rate_limit(limit=20)  # NEW: 20 requests per minute per user (file cleanup)
 def delete_egg(egg_id: str) -> tuple[Response, int]:
     allowed, user_data = get_current_user(request)
     if not allowed:
@@ -649,14 +714,25 @@ def delete_egg(egg_id: str) -> tuple[Response, int]:
 
     with DB("db.db") as db:
         egg = db.get_egg(egg_id)
+        if not egg:
+            return jsonify({"error": "Egg not found"}), 404
         if egg.author_id != user_id:
             return jsonify({"error": "Forbidden"}), 403
         db.delete_egg(egg_id)
+
+        if egg.texture and db.count_texture_usage(egg.texture) == 0:
+            try:
+                texture_path = Path(FLASK_ROOT) / "src" / egg.texture
+                if texture_path.exists():
+                    texture_path.unlink()
+            except Exception as e:
+                print(f"Warning: couldn't delete texture {egg.texture}: {e}")
 
     return jsonify({"success": True}), 200
 
 
 @app.route("/api/like_egg", methods=["POST"])
+@rate_limit(limit=30)  # NEW: 30 requests per minute per user (prevent spam)
 def like_egg() -> tuple[Response, int]:
     allowed, user_data = get_current_user(request)
     if not allowed:
@@ -674,6 +750,7 @@ def like_egg() -> tuple[Response, int]:
 
 
 @app.route("/api/dislike_egg", methods=["POST"])
+@rate_limit(limit=30)  # NEW: 30 requests per minute per user (prevent spam)
 def dislike_egg() -> tuple[Response, int]:
     # FIX: use authenticated identity
     allowed, user_data = get_current_user(request)
@@ -721,6 +798,32 @@ def logout():
     resp = make_response(redirect("/"))
     resp.set_cookie("discord_token", "", expires=0, path="/")
     return resp
+
+
+# NEW: Periodic cleanup of rate limiter cache
+@app.before_request
+def cleanup_rate_limiter_cache():
+    """Clean up expired rate limit entries periodically (every hour)."""
+    if not hasattr(cleanup_rate_limiter_cache, 'last_cleanup'):
+        cleanup_rate_limiter_cache.last_cleanup = time.time()
+    
+    now = time.time()
+    if now - cleanup_rate_limiter_cache.last_cleanup > 3600:  # Every hour
+        limiter = get_rate_limiter()
+        limiter.cleanup(max_age=3600)
+        cleanup_rate_limiter_cache.last_cleanup = now
+
+
+@app.after_request
+def set_cache_headers(response: Response) -> Response:
+    """Set HTTP cache headers for static assets and immutable textures."""
+    if request.path.startswith('/textures/'):
+        response.cache_control.max_age = 86400 * 30  
+        response.cache_control.public = True
+
+    elif request.path.startswith('/assets/'):
+        response.cache_control.max_age = 86400  
+    return response
 
 
 if __name__ == "__main__":

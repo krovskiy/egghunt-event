@@ -291,6 +291,10 @@ a {
   transition: transform 0.2s ease;
 }
 
+a.sponsor {
+  min-width: 15vw;
+}
+
 
 .sponsor::before,
 .sponsor::after {

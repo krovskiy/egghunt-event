@@ -72,9 +72,6 @@ function buildGrid(data, gridID) {
     if (gridID === 'eggGrid-Redeemed') {
       card.classList.add('egg-container-redeemed');
     }
-    if (gridID === 'eggGrid-Redeemed') {
-      card.classList.add('egg-container-redeemed');
-    }
 
     const ext = egg.author_avatar?.startsWith("a_") ? "gif" : "png";
 
@@ -95,9 +92,14 @@ function buildGrid(data, gridID) {
       ${qrActionHtml}
       </div>
       <div class="egg-info">
-        <div class="egg-name"><b>${egg.name}</b></div>
-        <div class="egg-creator">Uploaded by: ${egg.author} <img class="creator-img" src="${avatarUrl}"</div>
+        <div class="egg-name"><b></b></div>
+        <div class="egg-creator">Uploaded by: <span class="egg-author"></span> <img class="creator-img" src="${avatarUrl}"/></div>
     `; //somehow needs to fetch discord image instead of the placeholder 'creator-img'
+
+    const nameEl = card.querySelector('.egg-name b');
+    if (nameEl) nameEl.textContent = egg.name ?? '';
+    const authorEl = card.querySelector('.egg-author');
+    if (authorEl) authorEl.textContent = egg.author ?? '';
 
     grid.appendChild(card);
 
@@ -128,7 +130,7 @@ function buildGrid(data, gridID) {
       linkSection.className = "qr-link-section";
       linkSection.innerHTML = `
         <div class="egg-label" style="text-align:center;">${egg.name}</div>
-        <div class="qr-link-url">http://localhost:5000/redeem_egg/${egg.salted_hash}</div>
+        <div class="qr-link-url">/redeem_egg/${egg.salted_hash}</div>
         <div class="qr-link-buttons">
           <button class="overlay-btn qr-copy-btn">COPY LINK</button>
           <button class="overlay-btn qr-download-btn">DOWNLOAD QR</button>
@@ -142,11 +144,11 @@ function buildGrid(data, gridID) {
       overlay.appendChild(box);
       document.body.appendChild(overlay);
 
-      new QRCode(qrcodeDiv, `http://localhost:5000/redeem_egg/${egg.salted_hash}`)
+      new QRCode(qrcodeDiv, `/redeem_egg/${egg.salted_hash}`)
 
       const copyBtn = linkSection.querySelector('.qr-copy-btn');
       copyBtn.addEventListener('click', async () => {
-        const url = `http://localhost:5000/redeem_egg/${egg.salted_hash}`;
+        const url = `/redeem_egg/${egg.salted_hash}`;
         try {
           await navigator.clipboard.writeText(url);
           const originalText = copyBtn.textContent;

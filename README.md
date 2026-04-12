@@ -32,17 +32,17 @@ pip install -r requirements.txt
 ### uv
 
 ```shell
-uv run server.py
+uv run backend.py
 ```
 ### python
 activate the environment
 ```shell
-python server.py
+python backend.py
 ```
 
 # Deploy
 
 make sure waitress is installed
 ```shell
-waitress-serve --listen=0.0.0.0:8080 server:app
+waitress-serve --listen=0.0.0.0:8080 backend:app
 ```
