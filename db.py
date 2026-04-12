@@ -233,6 +233,60 @@ class DB:
                                    FROM eyren;
                                    """
 
+    __LEADERBOARD_QUERY__ = """
+            SELECT
+                id,
+                name,
+                hint,
+                author_id,
+                author,
+                author_avatar,
+                max_redeems,
+                redeems,
+                created_at,
+                texture,
+                textureSize,
+                reward,
+                salted_hash,
+                CASE
+                    WHEN liked_users IS NULL OR liked_users = '' THEN 0
+                    ELSE (length(liked_users) - length(replace(liked_users, ',', '')) + 1)
+                END AS like_count,
+                CASE
+                    WHEN disliked_users IS NULL OR disliked_users = '' THEN 0
+                    ELSE (length(disliked_users) - length(replace(disliked_users, ',', '')) + 1)
+                END AS dislike_count
+            FROM eyren
+            ORDER BY
+                CASE
+                    WHEN (
+                        CASE WHEN liked_users IS NULL OR liked_users = '' THEN 0
+                             ELSE (length(liked_users) - length(replace(liked_users, ',', '')) + 1)
+                        END
+                        +
+                        CASE WHEN disliked_users IS NULL OR disliked_users = '' THEN 0
+                             ELSE (length(disliked_users) - length(replace(disliked_users, ',', '')) + 1)
+                        END
+                    ) = 0 THEN 0
+                    ELSE 1.0 *
+                        CASE WHEN liked_users IS NULL OR liked_users = '' THEN 0
+                             ELSE (length(liked_users) - length(replace(liked_users, ',', '')) + 1)
+                        END /
+                        (
+                            CASE WHEN liked_users IS NULL OR liked_users = '' THEN 0
+                                 ELSE (length(liked_users) - length(replace(liked_users, ',', '')) + 1)
+                            END
+                            +
+                            CASE WHEN disliked_users IS NULL OR disliked_users = '' THEN 0
+                                 ELSE (length(disliked_users) - length(replace(disliked_users, ',', '')) + 1)
+                            END
+                        )
+                END DESC,
+                redeems DESC,
+                created_at DESC,
+                id ASC
+        """
+
     path: str | Path
     conn: sqlite.Connection
 
@@ -320,7 +374,7 @@ class DB:
                 raise DBError(e) from e
         self.conn.close()
 
-    def _row_to_egg(self, row: tuple) -> "Egg":
+    def _row_to_egg(self, row: tuple) -> Egg:
         return Egg(
             egg_id=row[0],
             name=row[1],
@@ -511,59 +565,7 @@ class DB:
         self, limit: int | None = None, offset: int = 0
     ) -> list[dict]:
         """Returns eggs sorted by like/dislike ratio and redeems, with counts."""
-        query = """
-            SELECT
-                id,
-                name,
-                hint,
-                author_id,
-                author,
-                author_avatar,
-                max_redeems,
-                redeems,
-                created_at,
-                texture,
-                textureSize,
-                reward,
-                salted_hash,
-                CASE
-                    WHEN liked_users IS NULL OR liked_users = '' THEN 0
-                    ELSE (length(liked_users) - length(replace(liked_users, ',', '')) + 1)
-                END AS like_count,
-                CASE
-                    WHEN disliked_users IS NULL OR disliked_users = '' THEN 0
-                    ELSE (length(disliked_users) - length(replace(disliked_users, ',', '')) + 1)
-                END AS dislike_count
-            FROM eyren
-            ORDER BY
-                CASE
-                    WHEN (
-                        CASE WHEN liked_users IS NULL OR liked_users = '' THEN 0
-                             ELSE (length(liked_users) - length(replace(liked_users, ',', '')) + 1)
-                        END
-                        +
-                        CASE WHEN disliked_users IS NULL OR disliked_users = '' THEN 0
-                             ELSE (length(disliked_users) - length(replace(disliked_users, ',', '')) + 1)
-                        END
-                    ) = 0 THEN 0
-                    ELSE 1.0 *
-                        CASE WHEN liked_users IS NULL OR liked_users = '' THEN 0
-                             ELSE (length(liked_users) - length(replace(liked_users, ',', '')) + 1)
-                        END /
-                        (
-                            CASE WHEN liked_users IS NULL OR liked_users = '' THEN 0
-                                 ELSE (length(liked_users) - length(replace(liked_users, ',', '')) + 1)
-                            END
-                            +
-                            CASE WHEN disliked_users IS NULL OR disliked_users = '' THEN 0
-                                 ELSE (length(disliked_users) - length(replace(disliked_users, ',', '')) + 1)
-                            END
-                        )
-                END DESC,
-                redeems DESC,
-                created_at DESC,
-                id ASC
-        """
+        query = self.__LEADERBOARD_QUERY__
         params: tuple = ()
         if limit is not None:
             query = f"{query} LIMIT ? OFFSET ?"
