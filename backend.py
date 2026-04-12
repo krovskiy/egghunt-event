@@ -1,4 +1,5 @@
 import base64
+import time
 from hashlib import md5
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    session,
 )
 from flask.json import jsonify
 from requests import get, post
@@ -27,16 +29,56 @@ REDIRECT_URI = dotenv.dotenv_values(".env")["REDIRECT_URI"]
 CALLBACK_URI = "http://localhost:5000/callback/discord"
 
 
+# store ttl and in session - DIMA
+# i actually have no idea how good this is the way by using flask -> session
+app.secret_key = dotenv.dotenv_values(".env")["SECRET_KEY"]
+
+# ttl - temporary cache tuple, needs to be purged after it gets filled. TODO: add purge
+_token_cache: dict[str, tuple[dict, float]] = {}
+CACHE_TTL = 300
+CACHE_MAX_SIZE = 1000  # FIX: prevent unbounded growth
+
+# file prepare texture
+ALLOWED_IMAGE_TYPES = {"png", "jpeg", "jpg", "gif", "webp"}  # FIX: whitelist image types
+MAX_TEXTURE_BYTES = 5 * 1024 * 1024
+MAX_NAME_LEN = 60
+MAX_HINT_LEN = 280
+MAX_REWARD_LEN = 140
+MAX_REDEEMS_LIMIT = 99
+DEFAULT_AVATAR = "https://cdn.discordapp.com/embed/avatars/0.png"
+
+def _evict_expired_tokens() -> None:
+    """FIX: sweep expired entries instead of only evicting on hit."""
+    now = time.time()
+    expired = [k for k, (_, exp) in _token_cache.items() if now >= exp]
+    for k in expired:
+        del _token_cache[k]
+
 def verify_discord_token(access_token: str) -> tuple[bool, dict | None]:
-    url = "https://discord.com/api/users/@me"
-    headers = {"Authorization": f"Bearer {access_token}"}
+    now = time.time()
 
-    r = get(url, headers=headers)
+    # return cached result if still fresh or somethin
+    if access_token in _token_cache:
+        user_data, expires_at = _token_cache[access_token]
+        if now < expires_at:
+            return True, user_data
+        del _token_cache[access_token]
 
+    # otherwise hit discord
+    r = get("https://discord.com/api/users/@me",
+            headers={"Authorization": f"Bearer {access_token}"})
+
+    # store that shit in token cache
     if r.status_code == 200:
-        return True, r.json()  # token is valid → return user info
-    return False, None  # token invalid or expired
+        user_data = r.json()
+        # FIX: evict before inserting to cap cache size
+        if len(_token_cache) >= CACHE_MAX_SIZE:
+            _evict_expired_tokens()
+        _token_cache[access_token] = (user_data, now + CACHE_TTL)
+        print(_token_cache)
+        return True, user_data
 
+    return False, None
 
 def exchange_code(code: str) -> dict:
     data = {
@@ -50,8 +92,25 @@ def exchange_code(code: str) -> dict:
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
     response = post("https://discord.com/api/oauth2/token", data=data, headers=headers)
-    return response.json()
+    # FIX: return None on OAuth errors instead of raising KeyError later
+    payload = response.json()
+    if "access_token" not in payload:
+        return None
+    return payload
 
+
+# replace verify_discord_token because it is too slow with this. short - stores token in session
+def get_current_user(req) -> tuple[bool, dict | None]:
+    # FIX: actually use the session cache so it isn't dead code
+    if "user" in session:
+        return True, session["user"]
+    token = req.cookies.get("discord_token")
+    if not token:
+        return False, None
+    ok, user_data = verify_discord_token(token)
+    if ok:
+        session["user"] = user_data
+    return ok, user_data
 
 @app.route("/login")
 def login_redirect() -> Response:
@@ -63,9 +122,27 @@ def login_redirect() -> Response:
 
 @app.route("/callback/discord")
 def auth() -> Response:
+    code = request.args.get("code")
+    if not code:
+        return redirect("/login", 302)
+ 
+    # FIX: handle failed exchange gracefully
+    token_data = exchange_code(code)
+    if not token_data:
+        return redirect("/login?error=oauth_failed", 302)
+ 
+    token = token_data["access_token"]
+ 
+    ok, user_data = verify_discord_token(token)
+    if not ok or user_data is None:
+        return redirect("/login?error=token_invalid", 302)
+ 
+    # FIX: clear any stale session before setting new user
+    session.clear()
+    session["user"] = user_data
+ 
     resp = make_response(redirect("/"))
-    token = exchange_code(request.args.get("code"))["access_token"]
-    resp.set_cookie("discord_token", token)
+    resp.set_cookie("discord_token", token, httponly=True, samesite="Lax")
     return resp
 
 @app.route("/")
@@ -80,13 +157,23 @@ def rules_static() -> str:
 
 @app.route("/create-egg")
 def create_egg_static() -> str:
+    allowed, _ = get_current_user(request)
+    if not allowed:
+        return redirect("/login", 302)
     edit_id = request.args.get("edit")
     return render_template("/create-egg/index.html", edit_id=edit_id)
 
 
 @app.route("/my-eggs")
 def my_eggs_static() -> str:
+    allowed, _ = get_current_user(request)
+    if not allowed:
+        return redirect("/login", 302)
     return render_template("/my-eggs/index.html")
+
+@app.route("/leaderboard")
+def leaderboard_static() -> str:
+    return render_template("/leaderboard/index.html")
 
 
 class TextureError(Exception):
@@ -95,11 +182,24 @@ class TextureError(Exception):
 def prepare_texture(base64_data: str) -> str:
     try:
         texture_parts = base64_data.split(";base64,")
-        texture_type = texture_parts[0].split("image/")[-1]
+        if len(texture_parts) != 2:
+            raise ValueError("Invalid base64 data URI format")
+ 
+        raw_type = texture_parts[0].split("image/")[-1].lower().strip()
+ 
+        # FIX: whitelist allowed image types to prevent arbitrary file uploads
+        if raw_type not in ALLOWED_IMAGE_TYPES:
+            raise ValueError(f"Unsupported image type: {raw_type!r}")
+
+        # normalize jpeg
+        texture_type = "jpg" if raw_type == "jpeg" else raw_type
         texture_data = base64.b64decode(texture_parts[1])
+        if len(texture_data) > MAX_TEXTURE_BYTES:
+            raise ValueError("Texture exceeds maximum allowed size (ALLOCATED 5 MB)")
         texture_hash = md5(texture_data).hexdigest()  # noqa: S324
         texture_dir = Path(FLASK_ROOT) / "src" / "textures"
         texture_dir.mkdir(parents=True, exist_ok=True)
+
         texture_path = texture_dir / f"{texture_hash}.{texture_type}"  # path creation in case there is not
         texture_path.write_bytes(texture_data)
     except Exception as e:
@@ -109,32 +209,177 @@ def prepare_texture(base64_data: str) -> str:
         return texture_path.relative_to(Path(FLASK_ROOT) / "src").as_posix()
 
 
+def _normalize_text(value: object, field_name: str, max_len: int, allow_empty: bool = False) -> tuple[str | None, str | None]:
+    if value is None:
+        return None, f"{field_name} is required"
+    if not isinstance(value, str):
+        return None, f"{field_name} must be a string"
+
+    text = value.strip()
+    if not text and not allow_empty:
+        return None, f"{field_name} is required"
+    if len(text) > max_len:
+        return None, f"{field_name} is too long (max {max_len} chars)"
+    if "<" in text or ">" in text:
+        return None, f"{field_name} contains invalid characters"
+    if "\x00" in text:
+        return None, f"{field_name} contains invalid characters"
+
+    return text, None
+
+
+def _parse_max_redeems(value: object) -> tuple[int | None, str | None]:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None, "max_redeems must be a number"
+
+    if parsed < 1:
+        return None, "max_redeems must be at least 1"
+    if parsed > MAX_REDEEMS_LIMIT:
+        return None, f"max_redeems must be at most {MAX_REDEEMS_LIMIT}"
+
+    return parsed, None
+
+
+def _split_csv(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [item for item in value.split(",") if item]
+
+
+def _avatar_url(user_id: str | None, avatar_hash: str | None) -> str:
+    if not user_id or not avatar_hash:
+        return DEFAULT_AVATAR
+    ext = "gif" if avatar_hash.startswith("a_") else "png"
+    return f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.{ext}"
+
+
 @app.route("/api/list_eggs", methods=["GET"])
 def list_eggs() -> tuple[Response, int]:
+    allowed, user_data = get_current_user(request)
+    user_id = user_data["id"] if allowed and user_data else None
+
+    limit = request.args.get("limit", type=int)
+    offset = request.args.get("offset", default=0, type=int)
+
     with DB("db.db") as db:
         eggs = db.list_eggs()
+        if limit is not None:
+            eggs = eggs[offset:offset + limit]
+        redeemed_ids = set()
+        if user_id:
+            redeemed = db.get_user_eggs(user_id)
+            redeemed_ids = {egg.egg_id for egg in redeemed}
 
-    return jsonify([egg.model_dump(exclude={"egg_id"}) for egg in eggs]), 200
+    payload = []
+    for egg in eggs:
+        data = egg.model_dump()
+        data["redeemed_by_me"] = egg.egg_id in redeemed_ids
+        payload.append(data)
+
+    return jsonify(payload), 200
+
+
+@app.route("/api/list_eggs_by_feedback", methods=["GET"])
+def list_eggs_by_feedback() -> tuple[Response, int]:
+    allowed, user_data = get_current_user(request)
+    user_id = user_data["id"] if allowed and user_data else None
+
+    limit = request.args.get("limit", type=int)
+    offset = request.args.get("offset", default=0, type=int)
+
+    with DB("db.db") as db:
+        results = db.list_eggs_by_feedback(limit=limit, offset=offset)
+        redeemed_ids = set()
+        if user_id:
+            redeemed = db.get_user_eggs(user_id)
+            redeemed_ids = {egg.egg_id for egg in redeemed}
+
+    payload = []
+    for row in results:
+        egg = row["egg"]
+        data = egg.model_dump()
+        data["redeemed_by_me"] = egg.egg_id in redeemed_ids
+        data["likes"] = row["like_count"]
+        data["dislikes"] = row["dislike_count"]
+        payload.append(data)
+
+    return jsonify(payload), 200
+
+
+@app.route("/api/leaderboard", methods=["GET"])
+def leaderboard() -> tuple[Response, int]:
+    limit = request.args.get("limit", default=5, type=int)
+
+    likes_by_author: dict[str, int] = {}
+    redeemed_by_user: dict[str, int] = {}
+    user_meta: dict[str, dict[str, str]] = {}
+
+    with DB("db.db") as db:
+        rows = db.get_leaderboard_source()
+
+    for author_id, author, author_avatar, liked_users, redeemed_users in rows:
+        if author_id:
+            user_meta[author_id] = {
+                "name": author or "Unknown",
+                "avatar": _avatar_url(author_id, author_avatar),
+            }
+
+        like_count = len(_split_csv(liked_users))
+        if author_id:
+            likes_by_author[author_id] = likes_by_author.get(author_id, 0) + like_count
+
+        for user_id in _split_csv(redeemed_users):
+            redeemed_by_user[user_id] = redeemed_by_user.get(user_id, 0) + 1
+
+    top_likes = sorted(likes_by_author.items(), key=lambda item: item[1], reverse=True)[:limit]
+    top_redeems = sorted(redeemed_by_user.items(), key=lambda item: item[1], reverse=True)[:limit]
+
+    likes_payload = []
+    for user_id, total_likes in top_likes:
+        meta = user_meta.get(user_id, {"name": user_id, "avatar": DEFAULT_AVATAR})
+        likes_payload.append({
+            "user_id": user_id,
+            "name": meta["name"],
+            "avatar": meta["avatar"],
+            "total": total_likes,
+        })
+
+    redeems_payload = []
+    for user_id, total_redeems in top_redeems:
+        meta = user_meta.get(user_id, {"name": user_id, "avatar": DEFAULT_AVATAR})
+        redeems_payload.append({
+            "user_id": user_id,
+            "name": meta["name"],
+            "avatar": meta["avatar"],
+            "total": total_redeems,
+        })
+
+    return jsonify({
+        "top_likes": likes_payload,
+        "top_redeems": redeems_payload,
+    }), 200
 
 
 @app.route("/api/my_eggs", methods=["GET"])
 def my_eggs() -> tuple[Response, int]:
 
-    allowed, user_data = verify_discord_token(request.cookies.get("discord_token"))
+    # FIX: use get_current_user so session cache is respected
+    allowed, user_data = get_current_user(request)
     if not allowed:
         return jsonify({"error": "Invalid token"}), 401
     user_id = user_data["id"]
-
+ 
     with DB("db.db") as db:
         eggs = db.get_user_eggs(user_id)
-
     return jsonify([egg.model_dump(exclude={"egg_id"}) for egg in eggs]), 200
 
 # routes for created_eggs by USER by dima
 @app.route("/api/created_eggs", methods=["GET"])
 def created_eggs() -> tuple[Response, int]:
 
-    allowed, user_data = verify_discord_token(request.cookies.get("discord_token"))
+    allowed, user_data = get_current_user(request)
     if not allowed:
         return jsonify({"error": "Invalid token"}), 401
     user_id = user_data["id"]
@@ -148,7 +393,7 @@ def created_eggs() -> tuple[Response, int]:
 @app.route("/api/egg/<egg_id>", methods=["GET"])
 def egg_detail(egg_id: str) -> tuple[Response, int]:
 
-    allowed, user_data = verify_discord_token(request.cookies.get("discord_token"))
+    allowed, user_data = get_current_user(request)
     if not allowed:
         return jsonify({"error": "Invalid token"}), 401
     user_id = user_data["id"]
@@ -156,7 +401,7 @@ def egg_detail(egg_id: str) -> tuple[Response, int]:
     with DB("db.db") as db:
         egg = db.get_egg(egg_id)
 
-    if egg.author != user_id:
+    if egg.author_id != user_id:
         return jsonify({"error": "Forbidden"}), 403
 
     return jsonify(egg.model_dump()), 200
@@ -164,14 +409,24 @@ def egg_detail(egg_id: str) -> tuple[Response, int]:
 
 @app.route("/api/redeem_egg", methods=["POST"])
 def redeem_egg() -> tuple[Response, int]:
-
+    # FIX: authenticate the request; reject user_id from the body
+    allowed, user_data = get_current_user(request)
+    if not allowed:
+        return jsonify({"error": "Invalid token"}), 401
+ 
     egg_id = request.json.get("egg_id")
-    user_id = request.json.get("user_id")
+    if not egg_id:
+        return jsonify({"error": "egg_id is required"}), 400
+ 
+    # FIX: use the verified identity, not a client-supplied user_id
+    user_id = user_data["id"]
 
     response = {
         "success": False,
     }
     with DB("db.db") as db:
+        if not db.get_created_eggs(user_id):
+            return jsonify({"error": "Create at least one egg before redeeming."}), 403
         success = db.redeem_egg(user_id, egg_id)
         if success:
             e = db.get_egg(egg_id)
@@ -180,33 +435,96 @@ def redeem_egg() -> tuple[Response, int]:
     return jsonify(response), 200
 
 
+@app.route("/redeem_egg/<salted_hash>")
+def redeem_egg_public(salted_hash: str) -> Response:
+    """Redeem an egg via its public salted hash and redirect to /my_eggs."""
+    allowed, user_data = get_current_user(request)
+    if not allowed:
+        return redirect("/login", 302)
+
+    user_id = user_data["id"]
+
+    try:
+        with DB("db.db") as db:
+            if not db.get_created_eggs(user_id):
+                return redirect("/my-eggs?error=must_create", 302)
+            egg = db.get_egg_by_hash(salted_hash)
+            success = db.redeem_egg(user_id, egg.egg_id)
+    except Exception as exc:
+        print(f"Redeem failed: {exc}")
+        return redirect("/my-eggs?error=invalid_egg", 302)
+
+    if success:
+        return redirect("/my-eggs?redeemed=true", 302)
+    return redirect("/my-eggs?error=redeem_failed", 302)
+
+
 # added by dima;  adds a created egg to the db
 @app.route("/api/create_egg", methods=["POST"])
 def create_egg() -> tuple[Response, int]:
+    # FIX: require authentication; don't trust user_id from the body
+    allowed, user_data = get_current_user(request)
+    if not allowed:
+        return jsonify({"error": "Invalid token"}), 401
+    
+
     data = request.json
     if not data:
         return jsonify({"error": "Missing JSON body"}), 400
 
-    user_id = data.get("user_id")
     name = data.get("name")
     hint = data.get("hint")
     texture = data.get("texture")
     max_redeems = data.get("max_redeems", 1)
     texture_size = data.get("textureSize", 0)
-
-    texture_path = prepare_texture(texture)
+    reward = data.get("reward", "")
+ 
+    # FIX: extract author info from verified Discord token
+    user_id = user_data["id"]
+    author_name = user_data.get("username", "Unknown")
+    author_avatar = user_data.get("avatar", "")
 
     if not all([user_id, name, hint, texture]):
-        return jsonify({"error": "user_id, name, hint and texture are required"}), 400
+        return jsonify({"error": "name, hint and texture are required"}), 400
 
+    name, name_error = _normalize_text(name, "name", MAX_NAME_LEN)
+    if name_error:
+        return jsonify({"error": name_error}), 400
+
+    hint, hint_error = _normalize_text(hint, "hint", MAX_HINT_LEN)
+    if hint_error:
+        return jsonify({"error": hint_error}), 400
+
+    reward, reward_error = _normalize_text(reward, "reward", MAX_REWARD_LEN, allow_empty=True)
+    if reward_error:
+        return jsonify({"error": reward_error}), 400
+
+    max_redeems, max_redeems_error = _parse_max_redeems(max_redeems)
+    if max_redeems_error:
+        return jsonify({"error": max_redeems_error}), 400
+
+    try:
+        texture_size = int(texture_size)
+    except (TypeError, ValueError):
+        return jsonify({"error": "textureSize must be a number"}), 400
+
+    # FIX: file written before the check above ^
+    try:
+        texture_path = prepare_texture(texture)
+    except TextureError as e:
+        return jsonify({"error": str(e)}), 400
+    
     with DB("db.db") as db:
         success, egg_id = db.add_egg(
             name=name,
             hint=hint,
-            author=user_id,
+            author_id=user_id,
+            author=author_name,
+            author_avatar=author_avatar,
             texture=texture_path,
             max_redeems=max_redeems,
             textureSize=texture_size,
+            reward=reward,
         )
 
     return jsonify({"success": success, "egg_id": egg_id}), 200
@@ -215,7 +533,7 @@ def create_egg() -> tuple[Response, int]:
 @app.route("/api/update_egg/<egg_id>", methods=["PUT"])
 def update_egg(egg_id: str) -> tuple[Response, int]:
 
-    allowed, user_data = verify_discord_token(request.cookies.get("discord_token"))
+    allowed, user_data = get_current_user(request)
     if not allowed:
         return jsonify({"error": "Invalid token"}), 401
     user_id = user_data["id"]
@@ -229,28 +547,59 @@ def update_egg(egg_id: str) -> tuple[Response, int]:
     max_redeems = data.get("max_redeems", 1)
     texture_size = data.get("textureSize", 0)
     texture = data.get("texture")
+    reward = data.get("reward", "")
 
     if not all([name, hint]):
         return jsonify({"error": "name and hint are required"}), 400
 
+    name, name_error = _normalize_text(name, "name", MAX_NAME_LEN)
+    if name_error:
+        return jsonify({"error": name_error}), 400
+
+    hint, hint_error = _normalize_text(hint, "hint", MAX_HINT_LEN)
+    if hint_error:
+        return jsonify({"error": hint_error}), 400
+
+    reward, reward_error = _normalize_text(reward, "reward", MAX_REWARD_LEN, allow_empty=True)
+    if reward_error:
+        return jsonify({"error": reward_error}), 400
+
+    max_redeems, max_redeems_error = _parse_max_redeems(max_redeems)
+    if max_redeems_error:
+        return jsonify({"error": max_redeems_error}), 400
+
+    try:
+        texture_size = int(texture_size)
+    except (TypeError, ValueError):
+        return jsonify({"error": "textureSize must be a number"}), 400
+
     with DB("db.db") as db:
         egg = db.get_egg(egg_id)
-        if egg.author != user_id:
+        if egg.author_id != user_id:
             return jsonify({"error": "Forbidden"}), 403
 
+        # FIX: resolve texture path if provided
+        texture_path = texture if texture else egg.texture
         if texture:
-            texture_path = prepare_texture(texture)
-        else:
-            texture_path = egg.texture
+            try:
+                texture_path = prepare_texture(texture)
+            except TextureError as e:
+                return jsonify({"error": str(e)}), 400
+
+        author_name = user_data.get("username", egg.author)
+        author_avatar = user_data.get("avatar", egg.author_avatar)
 
         success = db.update_egg(
             egg_id=egg_id,
             name=name,
             hint=hint,
-            author=user_id,
+            author_id=user_id,
+            author=author_name,
+            author_avatar=author_avatar,
             max_redeems=max_redeems,
             texture=texture_path,
             textureSize=texture_size,
+            reward=reward,
         )
 
     return jsonify({"success": success, "egg_id": egg_id}), 200
@@ -258,35 +607,53 @@ def update_egg(egg_id: str) -> tuple[Response, int]:
 
 @app.route("/api/delete_egg/<egg_id>", methods=["DELETE"])
 def delete_egg(egg_id: str) -> tuple[Response, int]:
+    allowed, user_data = get_current_user(request)
+    if not allowed:
+        return jsonify({"error": "Invalid token"}), 401
+    user_id = user_data["id"]
+ 
     with DB("db.db") as db:
+        egg = db.get_egg(egg_id)
+        if egg.author_id != user_id:
+            return jsonify({"error": "Forbidden"}), 403
         db.delete_egg(egg_id)
+ 
     return jsonify({"success": True}), 200
 
 
 @app.route("/api/like_egg", methods=["POST"])
 def like_egg() -> tuple[Response, int]:
+    allowed, user_data = get_current_user(request)
+    if not allowed:
+        return jsonify({"error": "Invalid token"}), 401
+ 
     data = request.json
-    user_id = data.get("user_id")
     egg_id = data.get("egg_id")
-    if not all([user_id, egg_id]):
-        return jsonify({"error": "user_id and egg_id are required"}), 400
-
+    if not egg_id:
+        return jsonify({"error": "egg_id is required"}), 400
+ 
+    user_id = user_data["id"]
     with DB("db.db") as db:
         db.like_egg(user_id, egg_id)
-        return jsonify({"success": True}), 200
+    return jsonify({"success": True}), 200
 
 
 @app.route("/api/dislike_egg", methods=["POST"])
 def dislike_egg() -> tuple[Response, int]:
+    # FIX: use authenticated identity
+    allowed, user_data = get_current_user(request)
+    if not allowed:
+        return jsonify({"error": "Invalid token"}), 401
+ 
     data = request.json
-    user_id = data.get("user_id")
     egg_id = data.get("egg_id")
-    if not all([user_id, egg_id]):
-        return jsonify({"error": "user_id and egg_id are required"}), 400
-
+    if not egg_id:
+        return jsonify({"error": "egg_id is required"}), 400
+ 
+    user_id = user_data["id"]
     with DB("db.db") as db:
         db.dislike_egg(user_id, egg_id)
-        return jsonify({"success": True}), 200
+    return jsonify({"success": True}), 200
 
 
 # add by dima, log in function -> returns: image, username, global_name FOR TESTING
@@ -297,11 +664,11 @@ def me() -> tuple[Response, int]:
     if not token:
         return jsonify({"error": "No token"}), 401
 
-    allowed, user_data = verify_discord_token(token)
+    allowed, user_data = get_current_user(request)
 
     if not allowed:
         return jsonify({"error": "Invalid token"}), 401
-    
+
     return jsonify({
         "id": user_data["id"],
         "username": user_data["username"],
@@ -311,6 +678,8 @@ def me() -> tuple[Response, int]:
 
 @app.route("/logout")
 def logout():
+    # FIX: clear the server-side session as well as the cookie
+    session.clear()
     resp = make_response(redirect("/"))
     resp.set_cookie("discord_token", "", expires=0, path="/")
     return resp
