@@ -42,7 +42,7 @@ const showSuccessToast = (isEdit = false) => {
     <svg class="toast-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path d="M9.2 16.2L4.8 11.8l1.4-1.4 3 3 8-8 1.4 1.4-9.4 9.4z"></path>
     </svg>
-    <span>Succesful! The Egg has been ${action}. Check My Eggs for QR Code!</span>
+    <span>The egg has been ${action}. Check My Eggs for QR Code!</span>
   `;
 
   document.body.appendChild(toast);
