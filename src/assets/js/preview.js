@@ -112,7 +112,8 @@ const applyEditEgg = (egg) => {
 
   
   if (egg.texture) {
-    currentTextureUrl = egg.texture.startsWith('/') ? egg.texture : `/${egg.texture}`;
+    const texturePath = egg.texture.startsWith('/') ? egg.texture : `/${egg.texture}`;
+    currentTextureUrl = `${BASE_PATH}${texturePath}`;
     console.log('Loading texture from server:', currentTextureUrl);
     reloadPreview(currentTextureUrl);
    
