@@ -1,4 +1,5 @@
 import base64
+import logging
 import time
 from hashlib import md5
 from pathlib import Path
@@ -19,6 +20,14 @@ from requests import get, post
 
 from db import DB
 from rate_limiter import rate_limit, get_rate_limiter  # NEW: Import rate limiter
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 app = Flask(
     __name__, static_folder="./src/assets", static_url_path="/egghunt/assets", template_folder="./src"
@@ -84,11 +93,15 @@ def verify_discord_token(access_token: str) -> tuple[bool, dict | None]:
         del _token_cache[access_token]
 
     # otherwise hit discord
-    r = get(
-        "https://discord.com/api/users/@me",
-        headers={"Authorization": f"Bearer {access_token}"},
-        timeout=REQUEST_TIMEOUT,
-    )
+    try:
+        r = get(
+            "https://discord.com/api/users/@me",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=REQUEST_TIMEOUT,
+        )
+    except Exception as e:
+        logger.error(f"Failed to connect to Discord API: {e}")
+        return False, None
 
     # store that shit in token cache
     if r.status_code == 200:
@@ -97,9 +110,9 @@ def verify_discord_token(access_token: str) -> tuple[bool, dict | None]:
         if len(_token_cache) >= CACHE_MAX_SIZE:
             _evict_expired_tokens()
         _token_cache[access_token] = (user_data, now + CACHE_TTL)
-        print(_token_cache)
         return True, user_data
 
+    logger.warning(f"Discord API returned status {r.status_code}: {r.text}")
     return False, None
 
 
@@ -114,15 +127,21 @@ def exchange_code(code: str) -> dict:
 
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
-    response = post(
-        "https://discord.com/api/oauth2/token",
-        data=data,
-        headers=headers,
-        timeout=REQUEST_TIMEOUT,
-    )
+    try:
+        response = post(
+            "https://discord.com/api/oauth2/token",
+            data=data,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
+        )
+    except Exception as e:
+        logger.error(f"Failed to connect to Discord token exchange: {e}")
+        return None
+
     # FIX: return None on OAuth errors instead of raising KeyError later
     payload = response.json()
     if "access_token" not in payload:
+        logger.warning(f"Discord token exchange failed: {payload}")
         return None
     return payload
 
@@ -158,17 +177,20 @@ def auth() -> Response:
     # FIX: handle failed exchange gracefully
     token_data = exchange_code(code)
     if not token_data:
+        logger.error("OAuth code exchange failed")
         return redirect(f"{BASE_PATH}/login?error=oauth_failed", 302)
 
     token = token_data["access_token"]
 
     ok, user_data = verify_discord_token(token)
     if not ok or user_data is None:
+        logger.error("Failed to verify Discord token after exchange")
         return redirect(f"{BASE_PATH}/login?error=token_invalid", 302)
 
     # FIX: clear any stale session before setting new user
     session.clear()
     session["user"] = user_data
+    logger.info(f"User logged in: {user_data.get('username')} ({user_data.get('id')})")
 
     resp = make_response(redirect(f"{BASE_PATH}/"))
     resp.set_cookie(
@@ -524,11 +546,13 @@ def redeem_egg_public(salted_hash: str) -> Response:
                 return redirect(f"{BASE_PATH}/my-eggs?error=invalid_egg", 302)
             success = db.redeem_egg(user_id, egg.egg_id)
     except Exception as exc:
-        print(f"Redeem failed: {exc}")
+        logger.exception(f"Redeem failed for user {user_id} with hash {salted_hash}")
         return redirect(f"{BASE_PATH}/my-eggs?error=invalid_egg", 302)
 
     if success:
+        logger.info(f"User {user_id} successfully redeemed egg with hash {salted_hash}")
         return redirect(f"{BASE_PATH}/my-eggs?redeemed=true", 302)
+    logger.warning(f"User {user_id} failed to redeem egg with hash {salted_hash}")
     return redirect(f"{BASE_PATH}/my-eggs?error=redeem_failed", 302)
 
 
@@ -711,7 +735,7 @@ def update_egg(egg_id: str) -> tuple[Response, int]:
                 if old_path.exists():
                     old_path.unlink()
             except Exception as e:
-                print(f"Warning: couldn't delete old texture {old_texture}: {e}")
+                logger.warning(f"Warning: couldn't delete old texture {old_texture}: {e}")
 
     return jsonify({"success": success, "egg_id": egg_id}), 200
 
@@ -738,7 +762,7 @@ def delete_egg(egg_id: str) -> tuple[Response, int]:
                 if texture_path.exists():
                     texture_path.unlink()
             except Exception as e:
-                print(f"Warning: couldn't delete texture {egg.texture}: {e}")
+                logger.warning(f"Warning: couldn't delete texture {egg.texture}: {e}")
 
     return jsonify({"success": True}), 200
 

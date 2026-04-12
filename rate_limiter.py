@@ -1,7 +1,11 @@
+import logging
 from functools import wraps
 from collections import defaultdict
 import time
 from flask import jsonify, request
+
+
+logger = logging.getLogger(__name__)
 
 
 class RateLimiter:
@@ -97,6 +101,7 @@ def rate_limit(limit: int, window: int = 60, per_user: bool = True):
 
             if not _rate_limiter.is_allowed(key, limit, window):
                 remaining = _rate_limiter.get_remaining(key, limit, window)
+                logger.warning(f"Rate limit exceeded for {key} on {request.path}")
                 return (
                     jsonify(
                         {

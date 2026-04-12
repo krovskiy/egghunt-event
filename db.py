@@ -1,4 +1,5 @@
-# TODO logging
+# Logging initialized via backend.py or manual config
+import logging
 import sqlite3 as sqlite
 import typing
 from hashlib import sha256
@@ -9,6 +10,9 @@ from pydantic import BaseModel
 
 SALT = str(dotenv.dotenv_values(".env")["SALT"])
 assert SALT is not None, "SALT is not set"  # noqa: S101
+
+
+logger = logging.getLogger(__name__)
 
 
 class DBError(Exception):
@@ -291,6 +295,7 @@ class DB:
     conn: sqlite.Connection
 
     def __init__(self, db_name: str) -> None:
+        logger.info(f"Initializing database: {db_name}")
         self.path = db_name
         self.conn = sqlite.connect(db_name)
         self.conn.execute(self.__INIT_SQL_QUERY__)
@@ -300,6 +305,7 @@ class DB:
 
     def _migrate(self, conn: sqlite.Connection) -> None:
         """Add new columns to existing databases that predate this schema."""
+        logger.info("Checking for database migrations...")
         existing = {row[1] for row in conn.execute("PRAGMA table_info(eyren)")}
         migrations = [
             (
@@ -329,6 +335,7 @@ class DB:
         ]
         for col, sql in migrations:
             if col not in existing:
+                logger.info(f"Applying migration: adding column {col}")
                 conn.execute(sql)
 
         conn.execute("""
@@ -362,15 +369,19 @@ class DB:
             self.__commit_after = commit_after
             self.conn = sqlite.connect(self.path)
         except sqlite.Error as e:
+            logger.exception(f"Failed to connect to database: {self.path}")
             raise DBError(e) from e
         else:
             return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:  # noqa: ANN001
-        if self.__commit_after:
+        if exc_type:
+            logger.error(f"Exception occurred during DB transaction: {exc_type.__name__}: {exc_val}")
+        if self.__commit_after and not exc_type:
             try:
                 self.conn.commit()
             except sqlite.Error as e:
+                logger.exception("Failed to commit database transaction")
                 raise DBError(e) from e
         self.conn.close()
 
@@ -410,6 +421,7 @@ class DB:
     ) -> tuple[bool, str]:
         """Adds an egg to the database, returns whether egg was added and its id"""
         egg_id = sha256(name.encode() + author_id.encode() + SALT.encode()).hexdigest()
+        logger.info(f"Adding new egg: {name} (ID: {egg_id}) by user {author_id}")
         salted_hash = self._make_salted_hash(egg_id)
         try:
             self.conn.execute(
@@ -430,7 +442,11 @@ class DB:
             )
             self.conn.commit()
         except sqlite.IntegrityError:
+            logger.warning(f"Failed to add egg {egg_id}: IntegrityError (likely already exists)")
             return False, egg_id
+        except sqlite.Error as e:
+            logger.error(f"Failed to add egg {egg_id}: {e}")
+            raise DBError(e) from e
         return True, egg_id
 
     def get_egg(self, egg_id: str) -> Egg | None:
@@ -468,6 +484,7 @@ class DB:
         reward: str = "",
     ) -> bool:
         """Updates an existing egg, returns whether it was updated"""
+        logger.info(f"Updating egg: {egg_id}")
         try:
             before = self.conn.total_changes
             self.conn.execute(
@@ -487,6 +504,7 @@ class DB:
             )
             self.conn.commit()
         except sqlite.OperationalError as e:
+            logger.error(f"Failed to update egg {egg_id}: {e}")
             raise DBError(e) from e
         return self.conn.total_changes > before
 
@@ -542,10 +560,12 @@ class DB:
 
     def delete_egg(self, egg_id: str) -> None:
         """Deletes an egg from the database"""
+        logger.info(f"Deleting egg: {egg_id}")
         try:
             self.conn.execute(self.__DELETE_EGG_QUERY__, (egg_id,))
             self.conn.commit()
         except sqlite.OperationalError as e:
+            logger.error(f"Failed to delete egg {egg_id}: {e}")
             raise DBError(e) from e
 
     def list_eggs(self) -> list[Egg]:
