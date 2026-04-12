@@ -423,7 +423,7 @@ def leaderboard() -> tuple[Response, int]:
 
 
 @app.route("/api/my_eggs", methods=["GET"])
-@rate_limit(limit=30)  # NEW: 30 requests per minute per user
+@rate_limit(limit=60)  # NEW: 60 requests per minute per user
 def my_eggs() -> tuple[Response, int]:
 
     # FIX: use get_current_user so session cache is respected
@@ -439,7 +439,7 @@ def my_eggs() -> tuple[Response, int]:
 
 # routes for created_eggs by USER by dima
 @app.route("/api/created_eggs", methods=["GET"])
-@rate_limit(limit=30)  # NEW: 30 requests per minute per user
+@rate_limit(limit=60)  # NEW: 60 requests per minute per user
 def created_eggs() -> tuple[Response, int]:
 
     allowed, user_data = get_current_user(request)
@@ -455,7 +455,7 @@ def created_eggs() -> tuple[Response, int]:
 
 # loads egg for EDIT
 @app.route("/api/egg/<egg_id>", methods=["GET"])
-@rate_limit(limit=30)  # NEW: 30 requests per minute per user
+@rate_limit(limit=60)  # NEW: 60 requests per minute per user
 def egg_detail(egg_id: str) -> tuple[Response, int]:
 
     allowed, user_data = get_current_user(request)
@@ -475,7 +475,7 @@ def egg_detail(egg_id: str) -> tuple[Response, int]:
 
 
 @app.route("/api/redeem_egg", methods=["POST"])
-@rate_limit(limit=10)  # NEW: 10 requests per minute per user (DB state change)
+@rate_limit(limit=30)  # NEW: 30 requests per minute per user (DB state change)
 def redeem_egg() -> tuple[Response, int]:
     # FIX: authenticate the request; reject user_id from the body
     allowed, user_data = get_current_user(request)
@@ -506,7 +506,7 @@ def redeem_egg() -> tuple[Response, int]:
 
 
 @app.route("/redeem_egg/<salted_hash>")
-@rate_limit(limit=10)  # NEW: 10 requests per minute per user
+@rate_limit(limit=30)  # NEW: 30 requests per minute per user
 def redeem_egg_public(salted_hash: str) -> Response:
     """Redeem an egg via its public salted hash and redirect to /my_eggs."""
     allowed, user_data = get_current_user(request)
@@ -534,7 +534,7 @@ def redeem_egg_public(salted_hash: str) -> Response:
 
 # added by dima;  adds a created egg to the db
 @app.route("/api/create_egg", methods=["POST"])
-@rate_limit(limit=5)  # NEW: 5 requests per minute per user (file upload + DB write)
+@rate_limit(limit=20)  # NEW: 20 requests per minute per user (file upload + DB write)
 def create_egg() -> tuple[Response, int]:
     # FIX: require authentication; don't trust user_id from the body
     allowed, user_data = get_current_user(request)
@@ -616,7 +616,7 @@ def create_egg() -> tuple[Response, int]:
 
 # route to update an egg with new information by dima
 @app.route("/api/update_egg/<egg_id>", methods=["PUT"])
-@rate_limit(limit=10)  # NEW: 10 requests per minute per user (file processing)
+@rate_limit(limit=30)  # NEW: 30 requests per minute per user (file processing)
 def update_egg(egg_id: str) -> tuple[Response, int]:
 
     allowed, user_data = get_current_user(request)
@@ -717,7 +717,7 @@ def update_egg(egg_id: str) -> tuple[Response, int]:
 
 
 @app.route("/api/delete_egg/<egg_id>", methods=["DELETE"])
-@rate_limit(limit=20)  # NEW: 20 requests per minute per user (file cleanup)
+@rate_limit(limit=40)  # NEW: 40 requests per minute per user (file cleanup)
 def delete_egg(egg_id: str) -> tuple[Response, int]:
     allowed, user_data = get_current_user(request)
     if not allowed:
@@ -744,7 +744,7 @@ def delete_egg(egg_id: str) -> tuple[Response, int]:
 
 
 @app.route("/api/like_egg", methods=["POST"])
-@rate_limit(limit=30)  # NEW: 30 requests per minute per user (prevent spam)
+@rate_limit(limit=60)  # NEW: 60 requests per minute per user (prevent spam)
 def like_egg() -> tuple[Response, int]:
     allowed, user_data = get_current_user(request)
     if not allowed:
@@ -762,7 +762,7 @@ def like_egg() -> tuple[Response, int]:
 
 
 @app.route("/api/dislike_egg", methods=["POST"])
-@rate_limit(limit=30)  # NEW: 30 requests per minute per user (prevent spam)
+@rate_limit(limit=60)  # NEW: 60 requests per minute per user (prevent spam)
 def dislike_egg() -> tuple[Response, int]:
     # FIX: use authenticated identity
     allowed, user_data = get_current_user(request)
