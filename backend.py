@@ -62,6 +62,7 @@ DEFAULT_AVATAR = "https://cdn.discordapp.com/embed/avatars/0.png"
 REQUEST_TIMEOUT = 5
 MAX_TEXTURE_REPEAT = 5
 COOKIE_SECURE = dotenv.dotenv_values(".env").get("COOKIE_SECURE", "0") == "1"
+BASE_PATH = "/egghunt"
 
 _leaderboard_cache: dict[str, tuple[dict, float]] = {"data": None, "expires": 0}
 
@@ -153,24 +154,24 @@ def login_redirect() -> Response:
 def auth() -> Response:
     code = request.args.get("code")
     if not code:
-        return redirect("/login", 302)
+        return redirect(f"{BASE_PATH}/login", 302)
 
     # FIX: handle failed exchange gracefully
     token_data = exchange_code(code)
     if not token_data:
-        return redirect("/login?error=oauth_failed", 302)
+        return redirect(f"{BASE_PATH}/login?error=oauth_failed", 302)
 
     token = token_data["access_token"]
 
     ok, user_data = verify_discord_token(token)
     if not ok or user_data is None:
-        return redirect("/login?error=token_invalid", 302)
+        return redirect(f"{BASE_PATH}/login?error=token_invalid", 302)
 
     # FIX: clear any stale session before setting new user
     session.clear()
     session["user"] = user_data
 
-    resp = make_response(redirect("/"))
+    resp = make_response(redirect(f"{BASE_PATH}/"))
     resp.set_cookie(
         "discord_token", token, httponly=True, samesite="Lax", secure=COOKIE_SECURE
     )
@@ -191,7 +192,7 @@ def rules_static() -> str:
 def create_egg_static() -> str:
     allowed, _ = get_current_user(request)
     if not allowed:
-        return redirect("/login", 302)
+        return redirect(f"{BASE_PATH}/login", 302)
     edit_id = request.args.get("edit")
     return render_template("/create-egg/index.html", edit_id=edit_id)
 
@@ -200,7 +201,7 @@ def create_egg_static() -> str:
 def my_eggs_static() -> str:
     allowed, _ = get_current_user(request)
     if not allowed:
-        return redirect("/login", 302)
+        return redirect(f"{BASE_PATH}/login", 302)
     return render_template("/my-eggs/index.html")
 
 
@@ -511,25 +512,25 @@ def redeem_egg_public(salted_hash: str) -> Response:
     """Redeem an egg via its public salted hash and redirect to /my_eggs."""
     allowed, user_data = get_current_user(request)
     if not allowed:
-        return redirect("/login", 302)
+        return redirect(f"{BASE_PATH}/login", 302)
 
     user_id = user_data["id"]
 
     try:
         with DB("db.db") as db:
             if not db.get_created_eggs(user_id):
-                return redirect("/my-eggs?error=must_create", 302)
+                return redirect(f"{BASE_PATH}/my-eggs?error=must_create", 302)
             egg = db.get_egg_by_hash(salted_hash)
             if not egg:
-                return redirect("/my-eggs?error=invalid_egg", 302)
+                return redirect(f"{BASE_PATH}/my-eggs?error=invalid_egg", 302)
             success = db.redeem_egg(user_id, egg.egg_id)
     except Exception as exc:
         print(f"Redeem failed: {exc}")
-        return redirect("/my-eggs?error=invalid_egg", 302)
+        return redirect(f"{BASE_PATH}/my-eggs?error=invalid_egg", 302)
 
     if success:
-        return redirect("/my-eggs?redeemed=true", 302)
-    return redirect("/my-eggs?error=redeem_failed", 302)
+        return redirect(f"{BASE_PATH}/my-eggs?redeemed=true", 302)
+    return redirect(f"{BASE_PATH}/my-eggs?error=redeem_failed", 302)
 
 
 # added by dima;  adds a created egg to the db
@@ -807,7 +808,7 @@ def me() -> tuple[Response, int]:
 def logout():
     # FIX: clear the server-side session as well as the cookie
     session.clear()
-    resp = make_response(redirect("/"))
+    resp = make_response(redirect(f"{BASE_PATH}/"))
     resp.set_cookie("discord_token", "", expires=0, path="/")
     return resp
 
