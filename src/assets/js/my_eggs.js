@@ -132,7 +132,7 @@ function buildGrid(data, gridID) {
       linkSection.className = "qr-link-section";
       linkSection.innerHTML = `
         <div class="egg-label" style="text-align:center;">${egg.name}</div>
-        <div class="qr-link-url">${BASE_PATH}/redeem_egg/${egg.salted_hash}</div>
+        <div class="qr-link-url">https://kafeshka.cc/${BASE_PATH}/redeem_egg/${egg.salted_hash}</div>
         <div class="qr-link-buttons">
           <button class="overlay-btn qr-copy-btn">COPY LINK</button>
           <button class="overlay-btn qr-download-btn">DOWNLOAD QR</button>
@@ -146,7 +146,7 @@ function buildGrid(data, gridID) {
       overlay.appendChild(box);
       document.body.appendChild(overlay);
 
-      new QRCode(qrcodeDiv, `${BASE_PATH}/redeem_egg/${egg.salted_hash}`)
+      new QRCode(qrcodeDiv, `https://kafeshka.cc/${BASE_PATH}/redeem_egg/${egg.salted_hash}`)
 
       const copyBtn = linkSection.querySelector('.qr-copy-btn');
       copyBtn.addEventListener('click', async () => {
