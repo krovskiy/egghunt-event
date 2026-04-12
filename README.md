@@ -1,4 +1,4 @@
-# Egg hunt event
+# The Amazing Virtual Egg Hunt
 
 # Setup
 
