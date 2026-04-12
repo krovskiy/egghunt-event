@@ -430,7 +430,7 @@ def list_eggs_by_feedback() -> tuple[Response, int]:
     payload = []
     for row in results:
         egg = row["egg"]
-        data = egg.model_dump()
+        data = egg.model_dump(exclude={"salted_hash"})
         data["redeemed_by_me"] = egg.egg_id in redeemed_ids
         data["likes"] = row["like_count"]
         data["dislikes"] = row["dislike_count"]
@@ -493,7 +493,7 @@ def egg_detail(egg_id: str) -> tuple[Response, int]:
     if egg.author_id != user_id:
         return jsonify({"error": "Forbidden"}), 403
 
-    return jsonify(egg.model_dump()), 200
+    return jsonify(egg.model_dump(exclude={"salted_hash"})), 200
 
 
 @app.route("/api/redeem_egg", methods=["POST"])

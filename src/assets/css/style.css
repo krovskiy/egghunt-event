@@ -1324,6 +1324,7 @@ a.sponsor {
 .toast span {
   white-space: normal;
   line-height: 1.4;
+  font-size: 12px;
 }
 
 .toast.is-visible {
