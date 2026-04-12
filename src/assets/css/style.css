@@ -703,6 +703,7 @@ a.sponsor {
   align-items: center;
   justify-content: center;
   z-index: 9999;
+  padding: 30px;
 }
 
 .overlay-box {
