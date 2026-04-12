@@ -248,10 +248,22 @@ class DB:
         """Add new columns to existing databases that predate this schema."""
         existing = {row[1] for row in conn.execute("PRAGMA table_info(eyren)")}
         migrations = [
-            ("author_id",     "ALTER TABLE eyren ADD COLUMN author_id     TEXT NOT NULL DEFAULT ''"),
-            ("author_avatar", "ALTER TABLE eyren ADD COLUMN author_avatar TEXT NOT NULL DEFAULT ''"),
-            ("reward",        "ALTER TABLE eyren ADD COLUMN reward        TEXT NOT NULL DEFAULT ''"),
-            ("salted_hash",   "ALTER TABLE eyren ADD COLUMN salted_hash   TEXT NOT NULL DEFAULT ''"),
+            (
+                "author_id",
+                "ALTER TABLE eyren ADD COLUMN author_id     TEXT NOT NULL DEFAULT ''",
+            ),
+            (
+                "author_avatar",
+                "ALTER TABLE eyren ADD COLUMN author_avatar TEXT NOT NULL DEFAULT ''",
+            ),
+            (
+                "reward",
+                "ALTER TABLE eyren ADD COLUMN reward        TEXT NOT NULL DEFAULT ''",
+            ),
+            (
+                "salted_hash",
+                "ALTER TABLE eyren ADD COLUMN salted_hash   TEXT NOT NULL DEFAULT ''",
+            ),
         ]
         for col, sql in migrations:
             if col not in existing:
@@ -329,7 +341,19 @@ class DB:
         try:
             self.conn.execute(
                 self.__EGG_INSERT_QUERY__,
-                (egg_id, name, hint, author_id, author, author_avatar, max_redeems, texture, textureSize, reward, salted_hash),
+                (
+                    egg_id,
+                    name,
+                    hint,
+                    author_id,
+                    author,
+                    author_avatar,
+                    max_redeems,
+                    texture,
+                    textureSize,
+                    reward,
+                    salted_hash,
+                ),
             )
             self.conn.commit()
         except sqlite.IntegrityError:
@@ -353,7 +377,6 @@ class DB:
             raise DBError(e) from e
         return self._row_to_egg(ret)
 
-
     def update_egg(
         self,
         egg_id: str,
@@ -372,7 +395,18 @@ class DB:
             before = self.conn.total_changes
             self.conn.execute(
                 self.__EGG_UPDATE_QUERY__,
-                (name, hint, author, author_avatar, max_redeems, texture, textureSize, reward, egg_id, author_id),
+                (
+                    name,
+                    hint,
+                    author,
+                    author_avatar,
+                    max_redeems,
+                    texture,
+                    textureSize,
+                    reward,
+                    egg_id,
+                    author_id,
+                ),
             )
             self.conn.commit()
         except sqlite.OperationalError as e:
@@ -429,7 +463,9 @@ class DB:
         except sqlite.OperationalError as e:
             raise DBError(e) from e
 
-    def list_eggs_by_feedback(self, limit: int | None = None, offset: int = 0) -> list[dict]:
+    def list_eggs_by_feedback(
+        self, limit: int | None = None, offset: int = 0
+    ) -> list[dict]:
         """Returns eggs sorted by like/dislike ratio and redeems, with counts."""
         query = """
             SELECT
@@ -496,17 +532,21 @@ class DB:
         results = []
         for row in rows:
             egg = self._row_to_egg(row[:13])
-            results.append({
-                "egg": egg,
-                "like_count": row[13],
-                "dislike_count": row[14],
-            })
+            results.append(
+                {
+                    "egg": egg,
+                    "like_count": row[13],
+                    "dislike_count": row[14],
+                }
+            )
         return results
 
     def get_user_eggs(self, user_id: str) -> list[Egg]:
         """Returns all eggs redeemed by a user"""
         try:
-            rows = self.conn.execute(self.__GET_USER_EGGS_QUERY__, (user_id,)).fetchall()
+            rows = self.conn.execute(
+                self.__GET_USER_EGGS_QUERY__, (user_id,)
+            ).fetchall()
         except sqlite.OperationalError as e:
             raise DBError(e) from e
         return [self._row_to_egg(row) for row in rows]
@@ -514,7 +554,9 @@ class DB:
     def get_created_eggs(self, user_id: str) -> list[Egg]:
         """Returns all eggs created by a user"""
         try:
-            rows = self.conn.execute(self.__GET_CREATED_EGGS_QUERY__, (user_id,)).fetchall()
+            rows = self.conn.execute(
+                self.__GET_CREATED_EGGS_QUERY__, (user_id,)
+            ).fetchall()
         except sqlite.OperationalError as e:
             raise DBError(e) from e
         return [self._row_to_egg(row) for row in rows]
