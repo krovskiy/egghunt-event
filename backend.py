@@ -456,7 +456,7 @@ def my_eggs() -> tuple[Response, int]:
 
     with DB("db.db") as db:
         eggs = db.get_user_eggs(user_id)
-    return jsonify([egg.model_dump(exclude={"egg_id"}) for egg in eggs]), 200
+    return jsonify([egg.model_dump() for egg in eggs]), 200
 
 
 # routes for created_eggs by USER by dima
