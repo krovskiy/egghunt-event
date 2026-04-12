@@ -22,6 +22,7 @@ from rate_limiter import rate_limit, get_rate_limiter  # NEW: Import rate limite
 app = Flask(
     __name__, static_folder="./src", static_url_path="/", template_folder="./src"
 )
+app.config["APPLICATION_ROOT"] = "/egghunt"
 FLASK_ROOT = app.root_path
 
 CLIENT_ID = dotenv.dotenv_values(".env")["DISCORD_CLIENT_ID"]
