@@ -261,17 +261,20 @@ function onScroll() {
   }, 200);
 }
 
-document.getElementById('eggGrid').addEventListener('click', (event) => {
-  if (event.target.closest('.egg-actions')) return;
-  if (event.target.closest('.egg-action')) return;
-  const stage = event.target.closest('.egg-stage');
-  if (!stage) return;
-  if (stage.dataset.dragged === 'true') {
-    stage.dataset.dragged = '';
-    return;
-  }
-  showOverlay(stage);
-});
+const grid = document.getElementById('eggGrid');
+if (grid) {
+  grid.addEventListener('click', (event) => {
+    if (event.target.closest('.egg-actions')) return;
+    if (event.target.closest('.egg-action')) return;
+    const stage = event.target.closest('.egg-stage');
+    if (!stage) return;
+    if (stage.dataset.dragged === 'true') {
+      stage.dataset.dragged = '';
+      return;
+    }
+    showOverlay(stage);
+  });
+}
 
 function showOverlay(stage) {
   const egg = {
@@ -336,5 +339,7 @@ function showOverlay(stage) {
   box.addEventListener('click', (e) => e.stopPropagation());
 }
 
-loadMore(true);
-window.addEventListener('scroll', onScroll);
+if (grid) {
+  loadMore(true);
+  window.addEventListener('scroll', onScroll);
+}
