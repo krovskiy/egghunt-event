@@ -364,7 +364,7 @@ function showOverlay(id, data, options = {}) {
     const deleteButton = eggInfo.querySelector('.overlay-delete');
 
     editButton?.addEventListener('click', () => {
-      window.location.href = `${API_BASE}/create-egg?edit=${egg.egg_id}`;
+      window.location.href = `${BASE_PATH}/create-egg?edit=${egg.egg_id}`;
     });
 
     deleteButton?.addEventListener('click', async () => {
