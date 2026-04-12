@@ -371,6 +371,12 @@ a {
   background-color: rgba(255, 255, 255, 0.495);
 }
 
+.egg-container-redeemed {
+  background-color: rgba(234, 243, 222, 0.8);
+  border-top-color: #d3e6b9;
+  border-bottom-color: #d3e6b9;
+}
+
 .egg-stage {
   height: 300px;
   position: relative;
@@ -400,6 +406,14 @@ a {
   opacity: 1;
   pointer-events: auto;
   transform: translateX(-50%) translateY(0);
+}
+
+@media (hover: none), (pointer: coarse) {
+  .egg-actions {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 .egg-action {
@@ -700,8 +714,13 @@ a {
 
 @media (min-width: 761px) {
   .overlay-box {
-    width: min(860px, 92vw);
-    height: min(420px, 75vh);
+    width: min(960px, 92vw);
+    height: min(480px, 75vh);
+  }
+
+  .overlay-qrcode {
+    width: min(680px, 92vw);
+    height: min(760px, 90vh);
   }
 }
 
@@ -729,9 +748,10 @@ a {
 .egg-row { display: flex; align-items: flex-start; flex-direction: column; gap: 10px; }
 .egg-key { font-size: 17px; color:  var(--text); min-width: 56px; padding-top: 2px; }
 .egg-value { font-size: 18px; font-weight: 500; overflow-wrap: anywhere; }
-.egg-hint { font-size: 18px; color: var(--text); margin-top: 2px; overflow-wrap: anywhere; }
+.egg-hint, .egg-reward { font-size: 18px; color: var(--text); margin-top: 2px; overflow-wrap: anywhere; }
+.egg-reward {color: blueviolet;}
 
-.egg-redeem-badge { display: inline-flex; align-items: center; border-radius: 999px; font-size: 17px; font-weight: 500; }
+.egg-redeem-badge { display: inline-flex; align-items: center; padding: 10px; border-radius: 999px; font-size: 17px; font-weight: 500; }
 .egg-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
 .redeem-green  { background: #EAF3DE; color: #3B6D11; } .redeem-green  .egg-dot { background: #639922; }
 .redeem-yellow { background: #FAEEDA; color: #854F0B; } .redeem-yellow .egg-dot { background: #EF9F27; }
@@ -945,6 +965,32 @@ a {
   margin-bottom: 6px;
 }
 
+.rules-timer {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #fff3f7;
+  border: 1px dashed rgba(255, 145, 169, 0.5);
+  display: grid;
+  gap: 6px;
+  width: 100%;
+
+}
+
+.rules-timer-label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7a6b72;
+}
+
+.rules-timer-value {
+  font-family: 'profont', 'Nunito', sans-serif;
+  font-size: 20px;
+  color: #4a4a4a;
+  letter-spacing: 0.5px;
+}
+
 .rules-lede {
   font-size: 15px;
   color: #6a5b63;
@@ -962,6 +1008,115 @@ a {
   font-size: 1.1rem;
   margin-bottom: 10px;
   color: #5a4b52;
+}
+
+.leaderboard-title {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.leaderboard-title h1 {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  font-size: 2.2rem;
+  color: #4a4a4a;
+}
+
+.leaderboard-title img {
+  display: block;
+  width: 128px;
+  height: 128px;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+.rules-leaderboard h3 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  color: #4a4a4a;
+}
+
+.rules-leaderboard {
+  margin: 40px;
+  margin-top: 50px; 
+}
+
+.leaderboard-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  padding: 16px 8px 6px;
+}
+
+.leaderboard-card {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 145, 169, 0.22);
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.leaderboard-card h3 {
+  text-align: center;
+}
+
+.leaderboard-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.leaderboard-item {
+  display: grid;
+  grid-template-columns: 28px 48px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff7fa;
+  border: 1px solid rgba(255, 145, 169, 0.18);
+}
+
+.leaderboard-rank {
+  font-weight: 700;
+  color: #5a4b52;
+  width: 28px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.leaderboard-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(255, 145, 169, 0.4);
+  justify-self: center;
+}
+
+.leaderboard-name {
+  font-weight: 600;
+  color: #4a4a4a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+}
+
+.leaderboard-score {
+  font-weight: 700;
+  color: #ff5c8a;
+  font-size: 13px;
+  text-align: right;
+  min-width: 72px;
 }
 
 .rules-list,
@@ -1184,6 +1339,10 @@ a {
 @media (max-width: 720px) {
   .rules-container{
     grid-template-columns: minmax(280px, 1fr);
+  }
+
+  .rules-leaderboard h1 {
+    font-size: 1rem;
   }
   .options {
     flex-wrap: wrap;

@@ -3,34 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Join the kafeshka virtual egg hunt. Create, hide, and redeem eggs with QR codes." />
+  <meta name="description" content="Leaderboard for the kafeshka virtual egg hunt. Scores." />
   <meta name="theme-color" content="#ffb6c1" />
-  <meta property="og:title" content="kafeshka place | egg hunt" />
-  <meta property="og:description" content="Create eggs, hide them in the real world, and let others find them." />
+  <meta property="og:title" content="rules | kafeshka egg hunt" />
+  <meta property="og:description" content="All the scores, who got the most likes, etc." />
   <meta property="og:type" content="website" />
-  <meta property="og:image" content="./assets/imgs/bunny.png" />
+  <meta property="og:image" content="../assets/imgs/bunny.png" />
   <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="kafeshka place | egg hunt" />
-  <meta name="twitter:description" content="Create eggs, hide them in the real world, and let others find them." />
-  <meta name="twitter:image" content="./assets/imgs/bunny.png" />
+  <meta name="twitter:title" content="Rules | kafeshka egg hunt" />
+  <meta name="twitter:description" content="All the scores, who got the most likes, etc." />
+  <meta name="twitter:image" content="../assets/imgs/egg-pic.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="./assets/css/style.css">
-    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/loaders/GLTFLoader.js/+esm" crossorigin="">
-    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.182.0/+esm" crossorigin="">
     <link rel="icon" type="image/png" href="assets/favicon/favicon-96x96.png" sizes="96x96" />
     <link rel="icon" type="image/svg+xml" href="assets/favicon/favicon.svg" />
     <link rel="shortcut icon" href="assets/favicon/favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-title" content="kafeshka | egg hunt" />
     <link rel="manifest" href="assets/favicon/site.webmanifest" />
+    <link rel="stylesheet" href="../assets/css/style.css">
     <script src="./assets/js/auth.js"></script>
     <title>kafeshka place | egg hunt</title>
 </head>
 <body>
 <main>
 <div class="shell">
-  <div class="header">
+<div class="header">
     <a href="/">
       <div class="event-container">
         <div class="title-image"><img src="./assets/imgs/bunny.jpg" alt="Bunny mascot" decoding="async" /></div>
@@ -45,7 +43,7 @@
     </a>
     <a class="sponsor" href="https://kafeshka.cc">
       <h3>your <mark class="mark-brown">kafeshka</mark> has<br> been stolen!</h3>
-      <h6 class="sponsor-tagline">+TalTech
+        <h6 class="sponsor-tagline">+TalTech
       </h6>
     </a>
     <div class="options">
@@ -79,11 +77,25 @@
         </div>
     </div>
   </div>
-  <div class="main-article-title"><h1>CURRENT EGGS: </h1></div>
-  <div class="egg-grid" id="eggGrid"></div>
 </div>
+
+<div class="rules-section rules-leaderboard">
+        <div class="leaderboard-title">
+          <h1><img src="../assets/imgs/yummers.jpg">Leaderboard</h1>
+        </div>
+        <div class="leaderboard-grid">
+          <div class="leaderboard-card">
+            <h3>Most Likes</h3>
+            <ul class="leaderboard-list" id="leaderboardLikes"></ul>
+          </div>
+          <div class="leaderboard-card">
+            <h3>Most Eggs Collected</h3>
+            <ul class="leaderboard-list" id="leaderboardRedeems"></ul>
+          </div>
+        </div>
+      </div>
 </main>
     
 </body>
-<script type="module" src="./assets/js/script.js"></script>
+<script src="../assets/js/leaderboard.js"></script>
 </html>
