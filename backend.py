@@ -11,6 +11,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_from_directory,
     session,
 )
 from flask.json import jsonify
@@ -20,9 +21,13 @@ from db import DB
 from rate_limiter import rate_limit, get_rate_limiter  # NEW: Import rate limiter
 
 app = Flask(
-    __name__, static_folder="./src", static_url_path="/", template_folder="./src"
+    __name__, static_folder="./src/assets", static_url_path="/egghunt/assets", template_folder="./src"
 )
 app.config["APPLICATION_ROOT"] = "/egghunt"
+
+from werkzeug.middleware.proxy_fix import ProxyFix
+
+app.wsgi_app = ProxyFix(app.wsgi_app, x_script_name=1)
 FLASK_ROOT = app.root_path
 
 CLIENT_ID = dotenv.dotenv_values(".env")["DISCORD_CLIENT_ID"]
@@ -202,6 +207,12 @@ def my_eggs_static() -> str:
 @app.route("/leaderboard")
 def leaderboard_static() -> str:
     return render_template("/leaderboard/index.html")
+
+
+@app.route("/textures/<path:filename>")
+def texture_file(filename: str) -> Response:
+    texture_dir = Path(FLASK_ROOT) / "src" / "textures"
+    return send_from_directory(texture_dir, filename)
 
 
 class TextureError(Exception):

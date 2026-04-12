@@ -5,7 +5,9 @@ const textureInput = document.getElementById("eggTexture")
 const textureStatus = document.getElementById("textureStatus")
 const textureRepeatInput = document.querySelector(".eggTextureNumber")
 
-const MODEL_PATH = '../assets/models/egg.glb';
+const BASE_PATH = '/egghunt';
+const API_BASE = `${BASE_PATH}/api`;
+const MODEL_PATH = `${BASE_PATH}/assets/models/egg.glb`;
 const MAX_NAME_LEN = 60;
 const MAX_HINT_LEN = 280;
 const MAX_REWARD_LEN = 140;
@@ -50,7 +52,7 @@ const showSuccessToast = (isEdit = false) => {
     toast.classList.remove('is-visible');
     setTimeout(() => {
       toast.remove();
-      window.location.href = '/create-egg';
+      window.location.href = `${BASE_PATH}/create-egg`;
     }, 400);
   }, 2400);
 };
@@ -121,7 +123,7 @@ const applyEditEgg = (egg) => {
 const loadEditEgg = async () => {
   if (!editId) return;
   try {
-    const res = await fetch(`/api/egg/${editId}`);
+    const res = await fetch(`${API_BASE}/egg/${editId}`);
     if (!res.ok) {
       console.error("Couldn't load egg for edit", await res.text());
       return;
@@ -341,7 +343,7 @@ submit.addEventListener("click", async (e)=>{
       textureBase64 = await toBase64(compressedFile);
     }
 
-    const url = isEdit ? `/api/update_egg/${editId}` : "/api/create_egg";
+    const url = isEdit ? `${API_BASE}/update_egg/${editId}` : `${API_BASE}/create_egg`;
     const method = isEdit ? "PUT" : "POST";
 
     const payload = {

@@ -1,6 +1,8 @@
 import { loadEgg } from './egg_viewer.js';
 
-const MODEL_PATH = './assets/models/egg.glb';
+const BASE_PATH = '/egghunt';
+const API_BASE = `${BASE_PATH}/api`;
+const MODEL_PATH = `${BASE_PATH}/assets/models/egg.glb`;
 const PAGE_SIZE = 10;
 const LOAD_THRESHOLD = 500;
 
@@ -29,7 +31,7 @@ function formatRedeemBadge(egg) {
 }
 
 async function fetchEggs(offset = 0, limit = PAGE_SIZE) {
-  const res = await fetch(`/api/list_eggs_by_feedback?offset=${offset}&limit=${limit}`);
+  const res = await fetch(`${API_BASE}/list_eggs_by_feedback?offset=${offset}&limit=${limit}`);
   return res.json(); // array of { name, hint, author, texture, max_redeems, egg_id? }
 }
 
@@ -184,7 +186,7 @@ function renderEggs(eggs, append = false) {
 
     likeButton.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const result = await voteEgg('/api/like_egg', egg.egg_id);
+      const result = await voteEgg(`${API_BASE}/like_egg`, egg.egg_id);
       if (!result.ok) {
         showVoteToast(result.message, true);
         return;
@@ -197,7 +199,7 @@ function renderEggs(eggs, append = false) {
 
     dislikeButton.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const result = await voteEgg('/api/dislike_egg', egg.egg_id);
+      const result = await voteEgg(`${API_BASE}/dislike_egg`, egg.egg_id);
       if (!result.ok) {
         showVoteToast(result.message, true);
         return;

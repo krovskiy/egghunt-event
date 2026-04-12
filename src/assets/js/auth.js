@@ -1,3 +1,6 @@
+const BASE_PATH = '/egghunt';
+const API_BASE = `${BASE_PATH}/api`;
+
 function setAuthOnlyVisibility(isAuthed) {
   document.querySelectorAll('.auth-only').forEach((el) => {
     if (isAuthed) {
@@ -11,7 +14,7 @@ function setAuthOnlyVisibility(isAuthed) {
 async function checkAuth() {
   setAuthOnlyVisibility(false);
   try{
-      const res = await fetch('/api/me');
+      const res = await fetch(`${API_BASE}/me`);
 
       if (!res.ok) return;
 
@@ -60,7 +63,7 @@ async function checkAuth() {
   }
 
 function logout() {
-  window.location.href = "/logout";
+  window.location.href = `${BASE_PATH}/logout`;
 }
 
 document.addEventListener('click', (e) => {

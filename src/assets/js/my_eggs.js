@@ -2,7 +2,9 @@ let currentUserId = null;
 
 import { loadEgg } from './egg_viewer.js';
 
-const MODEL_PATH = '../assets/models/egg.glb';
+const BASE_PATH = '/egghunt';
+const API_BASE = `${BASE_PATH}/api`;
+const MODEL_PATH = `${BASE_PATH}/assets/models/egg.glb`;
 
 function unloadStage(stageElement) {
   const cleanup = stageElement._cleanup;
@@ -130,7 +132,7 @@ function buildGrid(data, gridID) {
       linkSection.className = "qr-link-section";
       linkSection.innerHTML = `
         <div class="egg-label" style="text-align:center;">${egg.name}</div>
-        <div class="qr-link-url">/redeem_egg/${egg.salted_hash}</div>
+        <div class="qr-link-url">${BASE_PATH}/redeem_egg/${egg.salted_hash}</div>
         <div class="qr-link-buttons">
           <button class="overlay-btn qr-copy-btn">COPY LINK</button>
           <button class="overlay-btn qr-download-btn">DOWNLOAD QR</button>
@@ -144,11 +146,11 @@ function buildGrid(data, gridID) {
       overlay.appendChild(box);
       document.body.appendChild(overlay);
 
-      new QRCode(qrcodeDiv, `/redeem_egg/${egg.salted_hash}`)
+      new QRCode(qrcodeDiv, `${BASE_PATH}/redeem_egg/${egg.salted_hash}`)
 
       const copyBtn = linkSection.querySelector('.qr-copy-btn');
       copyBtn.addEventListener('click', async () => {
-        const url = `/redeem_egg/${egg.salted_hash}`;
+        const url = `${BASE_PATH}/redeem_egg/${egg.salted_hash}`;
         try {
           await navigator.clipboard.writeText(url);
           const originalText = copyBtn.textContent;
@@ -368,7 +370,7 @@ function showOverlay(id, data, options = {}) {
     deleteButton?.addEventListener('click', async () => {
       const confirmed = confirm('Remove this egg?');
       if (!confirmed) return;
-      const res = await fetch(`/api/delete_egg/${egg.egg_id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE}/delete_egg/${egg.egg_id}`, { method: 'DELETE' });
       if (res.ok) {
         overlay.remove();
         window.location.reload();
@@ -452,9 +454,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   try {
     const [meRes, createdRes, redeemedRes] = await Promise.all([
-      fetch('/api/me'),
-      fetch('/api/created_eggs'),
-      fetch('/api/my_eggs'),
+      fetch(`${API_BASE}/me`),
+      fetch(`${API_BASE}/created_eggs`),
+      fetch(`${API_BASE}/my_eggs`),
     ]);
 
 

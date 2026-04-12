@@ -44,11 +44,14 @@ const renderList = (listElement, entries, label) => {
   });
 };
 
+const BASE_PATH = '/egghunt';
+const API_BASE = `${BASE_PATH}/api`;
+
 const loadLeaderboard = async () => {
   if (!likesList || !redeemsList) return;
 
   try {
-    const res = await fetch('/api/leaderboard');
+    const res = await fetch(`${API_BASE}/leaderboard`);
     if (!res.ok) {
       throw new Error('Failed to load leaderboard');
     }
