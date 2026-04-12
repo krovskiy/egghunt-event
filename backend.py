@@ -383,7 +383,7 @@ def list_eggs() -> tuple[Response, int]:
 
     payload = []
     for egg in eggs:
-        data = egg.model_dump()
+        data = egg.model_dump(exclude={"salted_hash"})
         data["redeemed_by_me"] = egg.egg_id in redeemed_ids
         payload.append(data)
 
