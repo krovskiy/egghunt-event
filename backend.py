@@ -27,7 +27,7 @@ app.config["APPLICATION_ROOT"] = "/egghunt"
 
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-app.wsgi_app = ProxyFix(app.wsgi_app, x_script_name=1)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_prefix=1)
 FLASK_ROOT = app.root_path
 
 CLIENT_ID = dotenv.dotenv_values(".env")["DISCORD_CLIENT_ID"]
