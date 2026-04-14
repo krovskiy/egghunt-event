@@ -150,7 +150,7 @@ function buildGrid(data, gridID) {
 
       const copyBtn = linkSection.querySelector('.qr-copy-btn');
       copyBtn.addEventListener('click', async () => {
-        const url = `${BASE_PATH}/redeem_egg/${egg.salted_hash}`;
+        const url = `https://kafeshka.cc${BASE_PATH}/redeem_egg/${egg.salted_hash}`;
         try {
           await navigator.clipboard.writeText(url);
           const originalText = copyBtn.textContent;
