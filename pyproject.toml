@@ -1,7 +1,7 @@
 [project]
 name = "egghunt-event"
 version = "0.1.0"
-description = "Add your description here"
+description = "Virtual egg hunt for a kafeshka event"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
